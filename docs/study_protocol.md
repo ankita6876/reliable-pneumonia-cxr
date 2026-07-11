@@ -38,8 +38,11 @@
 
 - Version: [Specify version.]
 - Local path: [Specify local path; do not commit data to GitHub.]
-- Label definition and uncertainty handling: [Specify planned approach.]
-- Intended role: [Training, validation, external evaluation, or other.]
+- Label definition and uncertainty handling: Frontal images with Pneumonia labels `1`, `0`,
+  or `-1` are eligible. Missing Pneumonia labels are excluded. Uncertain (`-1`) labels are
+  retained without transformation for later comparison of uncertainty-handling approaches.
+- Intended role: CheXpert `train.csv` supplies the eligible development cohort; the official
+  `valid.csv` is reserved as a secondary evaluation set.
 
 ### MIMIC-CXR
 
@@ -59,25 +62,26 @@
 
 **Inclusion criteria:**
 
-- [Define eligible imaging studies.]
-- [Define required labels or reference standards.]
+- CheXpert frontal images only.
+- CheXpert records with Pneumonia labels `1`, `0`, or `-1`.
 - [Define any population or metadata requirements.]
 
 **Exclusion criteria:**
 
 - [Define image-quality exclusions.]
 - [Define duplicate, missing, or incomplete-record handling.]
-- [Define exclusions related to labels, projections, or clinical context.]
+- Lateral CheXpert images and rows with missing Pneumonia labels.
 
 ## 6. Data Splitting Strategy
 
 All splitting must occur at the **patient level** so that no patient contributes images to more than one split.
 
-- Training split: [Specify planned proportion and selection process.]
-- Validation split: [Specify planned proportion and model-selection process.]
-- Test split: [Specify planned proportion and final evaluation process.]
+- Training split: 70% of CheXpert cohort patients, assigned deterministically with seed 42.
+- Validation split: 15% of CheXpert cohort patients, assigned deterministically with seed 42.
+- Test split: 15% of CheXpert cohort patients, assigned deterministically with seed 42.
 - External evaluation: [Specify datasets and protocol, if applicable.]
-- Stratification: [Specify planned stratification variables, if any.]
+- Stratification: patient-level allocation stratified as closely as practical by original
+  Pneumonia label (`1`, `0`, or `-1`); uncertain labels remain untransformed.
 
 Test data must not be used for model selection, threshold tuning, or other development decisions.
 
