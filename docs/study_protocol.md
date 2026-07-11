@@ -40,7 +40,9 @@
 - Local path: [Specify local path; do not commit data to GitHub.]
 - Label definition and uncertainty handling: Frontal images with Pneumonia labels `1`, `0`,
   or `-1` are eligible. Missing Pneumonia labels are excluded. Uncertain (`-1`) labels are
-  retained without transformation for later comparison of uncertainty-handling approaches.
+  retained without transformation in the source cohort. Three predefined uncertainty-label
+  experiments will be compared: `u_zero` maps `-1` to `0`, `u_one` maps `-1` to `1`, and
+  `ignore` excludes `-1` records. No strategy is designated as best before evaluation.
 - Intended role: CheXpert `train.csv` supplies the eligible development cohort; the official
   `valid.csv` is reserved as a secondary evaluation set.
 
