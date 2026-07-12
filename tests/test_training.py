@@ -3,6 +3,7 @@
 import random
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,9 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from pneumonia_ai.training import engine  # noqa: E402
 from pneumonia_ai.training.engine import train_one_epoch, validate_one_epoch  # noqa: E402
 from pneumonia_ai.training.seed import seed_everything  # noqa: E402
+
+sys.path.insert(0, str(PROJECT_ROOT))
+from scripts import train_baseline  # noqa: E402
 
 
 class _ToyDataset(Dataset[dict[str, torch.Tensor]]):
@@ -94,3 +98,20 @@ def test_development_dataset_builder_never_requests_test_split(
     )
 
     assert requested_splits == ["train", "validation"]
+
+
+def test_dry_run_disables_pretrained_weights(monkeypatch) -> None:
+    """Dry runs never request pretrained weights, avoiding downloads."""
+    requested: dict[str, object] = {}
+
+    def fake_create_model(name: str, pretrained: bool) -> SimpleNamespace:
+        requested.update(name=name, pretrained=pretrained)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(train_baseline, "create_model", fake_create_model)
+
+    train_baseline._create_model_from_config(
+        {"name": "densenet121", "pretrained": True}, dry_run=True
+    )
+
+    assert requested == {"name": "densenet121", "pretrained": False}

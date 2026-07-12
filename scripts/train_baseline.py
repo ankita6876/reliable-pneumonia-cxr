@@ -10,7 +10,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from pneumonia_ai.models.densenet import create_densenet121  # noqa: E402
+from pneumonia_ai.models.factory import create_model  # noqa: E402
 from pneumonia_ai.training.engine import (  # noqa: E402
     build_train_validation_datasets,
     create_development_loaders,
@@ -65,6 +65,19 @@ def _transforms(image_size: int) -> tuple[transforms.Compose, transforms.Compose
     return train_transform, validation_transform
 
 
+def _create_model_from_config(
+    model_config: dict[str, object], dry_run: bool
+):
+    """Construct the YAML-selected backbone without downloads during dry runs."""
+    model_name = model_config.get("name")
+    if not isinstance(model_name, str):
+        raise ValueError("Configuration model.name must be a string.")
+    pretrained = model_config.get("pretrained")
+    if not isinstance(pretrained, bool):
+        raise ValueError("Configuration model.pretrained must be a boolean.")
+    return create_model(model_name, pretrained=False if dry_run else pretrained)
+
+
 def main() -> int:
     """Run the configurable baseline or its bounded dry-run verification."""
     args = parse_args()
@@ -94,9 +107,7 @@ def main() -> int:
             num_workers=int(training_config["num_workers"]),
             seed=seed,
         )
-        model = create_densenet121(
-            pretrained=False if args.dry_run else bool(model_config["pretrained"])
-        )
+        model = _create_model_from_config(model_config, args.dry_run)
         history = run_training(
             model,
             train_loader,

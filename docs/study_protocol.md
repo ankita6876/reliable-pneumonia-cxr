@@ -91,20 +91,27 @@ Test data must not be used for model selection, threshold tuning, or other devel
 
 ### DenseNet121
 
-- Architecture and initialization: [Specify planned configuration.]
-- Training configuration: [Specify planned configuration.]
+- Role: reference baseline.
+- Architecture and initialization: timm `densenet121`, configured for one binary output logit;
+  pretrained ImageNet weights are a configurable initialization option.
+- Training configuration: the shared initial protocol uses 224x224 inputs, ImageNet
+  normalization, BCEWithLogitsLoss, ignored uncertain labels, and train/validation splits only.
 
-### EfficientNet
+### ConvNeXt-Tiny
 
-- Architecture variant and initialization: [Specify planned configuration.]
-- Training configuration: [Specify planned configuration.]
+- Role: predefined comparator backbone.
+- Architecture and initialization: timm `convnext_tiny`, configured for one binary output logit;
+  pretrained ImageNet weights are a configurable initialization option.
+- Training configuration: the same shared initial protocol as DenseNet121.
 
-### ConvNeXt
+### EfficientNetV2-S
 
-- Architecture variant and initialization: [Specify planned configuration.]
-- Training configuration: [Specify planned configuration.]
+- Role: predefined comparator backbone.
+- Architecture and initialization: timm `tf_efficientnetv2_s`, configured for one binary output
+  logit; pretrained ImageNet weights are a configurable initialization option.
+- Training configuration: the same shared initial protocol as DenseNet121.
 
-No model is designated as the preferred model before evaluation.
+No architecture is designated the winner before evaluation.
 
 ## 8. Planned Experiments
 

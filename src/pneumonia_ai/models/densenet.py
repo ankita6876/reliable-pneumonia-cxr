@@ -1,9 +1,10 @@
-"""DenseNet model construction for binary pneumonia classification."""
+"""Backward-compatible DenseNet121 model construction."""
 
-import timm
 from torch import nn
+
+from pneumonia_ai.models.factory import create_model
 
 
 def create_densenet121(pretrained: bool = True) -> nn.Module:
     """Create a DenseNet121 with one binary-classification output logit."""
-    return timm.create_model("densenet121", pretrained=pretrained, num_classes=1)
+    return create_model("densenet121", pretrained=pretrained)
