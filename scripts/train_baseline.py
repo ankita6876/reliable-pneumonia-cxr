@@ -1,6 +1,7 @@
 """Train the initial DenseNet121 CheXpert baseline on train and validation only."""
 
 import argparse
+from copy import deepcopy
 from pathlib import Path
 import sys
 
@@ -13,7 +14,9 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from pneumonia_ai.models.factory import create_model  # noqa: E402
 from pneumonia_ai.training.engine import (  # noqa: E402
     UNCERTAIN_LABEL_STRATEGY,
+    amp_is_enabled,
     build_train_validation_datasets,
+    calculate_pos_weight,
     create_development_loaders,
     run_training,
     select_device,
@@ -41,6 +44,10 @@ def parse_args() -> argparse.Namespace:
         help="YAML baseline configuration path.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Run one batch per development split.")
+    parser.add_argument(
+        "--resume",
+        help="Existing run directory or best checkpoint to resume after configuration validation.",
+    )
     return parser.parse_args()
 
 
@@ -73,7 +80,7 @@ def _transforms(image_size: int) -> tuple[transforms.Compose, transforms.Compose
 
 
 def _create_model_from_config(
-    model_config: dict[str, object], dry_run: bool
+    model_config: dict[str, object], dry_run: bool, resume: bool = False
 ):
     """Construct the YAML-selected backbone without downloads during dry runs."""
     model_name = model_config.get("name")
@@ -82,7 +89,34 @@ def _create_model_from_config(
     pretrained = model_config.get("pretrained")
     if not isinstance(pretrained, bool):
         raise ValueError("Configuration model.pretrained must be a boolean.")
-    return create_model(model_name, pretrained=False if dry_run else pretrained)
+    return create_model(model_name, pretrained=False if dry_run or resume else pretrained)
+
+
+def _checkpoint_configuration(config: dict[str, object], dry_run: bool) -> dict[str, object]:
+    """Return the reproducibility-relevant configuration stored in checkpoints."""
+    checkpoint_config = deepcopy(config)
+    checkpoint_config["dry_run"] = dry_run
+    if dry_run:
+        checkpoint_config["model"]["pretrained"] = False
+        checkpoint_config["training"]["epochs"] = 1
+        checkpoint_config["training"]["batch_size"] = min(
+            int(checkpoint_config["training"]["batch_size"]), 2
+        )
+    return checkpoint_config
+
+
+def _resume_checkpoint(path: str) -> Path:
+    """Resolve a user-supplied run directory or its sole best checkpoint."""
+    candidate = Path(path)
+    checkpoint = candidate / "best_validation_auroc.pt" if candidate.is_dir() else candidate
+    if not checkpoint.is_file():
+        raise FileNotFoundError(f"Resume checkpoint does not exist: {checkpoint}")
+    return checkpoint
+
+
+def _directory_size_bytes(directory: Path) -> int:
+    """Return the compact persistent artifact size for user-facing reporting."""
+    return sum(path.stat().st_size for path in directory.rglob("*") if path.is_file())
 
 
 def main() -> int:
@@ -106,9 +140,18 @@ def main() -> int:
         else int(training_config["batch_size"])
     )
     effective_epochs = 1 if args.dry_run else int(training_config["epochs"])
-    effective_pretrained = False if args.dry_run else pretrained
-    run_directory, run_id, timestamp = create_run_directory(output_dir, model_name)
-    write_resolved_config(run_directory, config, args.dry_run)
+    effective_pretrained = False if args.dry_run or args.resume else pretrained
+    resume_checkpoint = _resume_checkpoint(args.resume) if args.resume else None
+    if resume_checkpoint is None:
+        run_directory, run_id, timestamp = create_run_directory(output_dir, model_name)
+        write_resolved_config(run_directory, config, args.dry_run)
+    else:
+        run_directory = resume_checkpoint.parent
+        saved_config_path = run_directory / "config.yaml"
+        if not saved_config_path.is_file():
+            raise ValueError("Resume run directory is missing config.yaml.")
+        run_id = "resumed"
+        timestamp = "resumed"
     seed_everything(seed)
     train_transform, validation_transform = _transforms(image_size)
     try:
@@ -127,26 +170,34 @@ def main() -> int:
             num_workers=int(training_config["num_workers"]),
             seed=seed,
         )
-        model = _create_model_from_config(model_config, args.dry_run)
+        model = _create_model_from_config(model_config, args.dry_run, resume_checkpoint is not None)
         device = select_device()
-        write_run_manifest(
-            run_directory,
-            run_id=run_id,
-            timestamp=timestamp,
-            model_name=model_name,
-            pretrained=effective_pretrained,
-            uncertain_label_strategy=UNCERTAIN_LABEL_STRATEGY,
-            seed=seed,
-            image_size=image_size,
-            batch_size=effective_batch_size,
-            learning_rate=float(training_config["learning_rate"]),
-            epoch_count=effective_epochs,
-            device=device,
-            split_manifest_path=args.manifest,
-            train_sample_count=len(train_dataset),
-            validation_sample_count=len(validation_dataset),
-            dry_run=args.dry_run,
+        amp_enabled = amp_is_enabled(bool(training_config["amp_enabled"]), device)
+        pos_weight = calculate_pos_weight(
+            train_dataset._labels, bool(training_config["class_weighting"])
         )
+        checkpoint_configuration = _checkpoint_configuration(config, args.dry_run)
+        if resume_checkpoint is None:
+            write_run_manifest(
+                run_directory,
+                run_id=run_id,
+                timestamp=timestamp,
+                model_name=model_name,
+                pretrained=effective_pretrained,
+                uncertain_label_strategy=UNCERTAIN_LABEL_STRATEGY,
+                seed=seed,
+                image_size=image_size,
+                batch_size=effective_batch_size,
+                learning_rate=float(training_config["learning_rate"]),
+                epoch_count=effective_epochs,
+                device=device,
+                split_manifest_path=args.manifest,
+                train_sample_count=len(train_dataset),
+                validation_sample_count=len(validation_dataset),
+                dry_run=args.dry_run,
+                amp_enabled=amp_enabled,
+                pos_weight=pos_weight,
+            )
         history = run_training(
             model,
             train_loader,
@@ -155,6 +206,15 @@ def main() -> int:
             epochs=effective_epochs,
             learning_rate=float(training_config["learning_rate"]),
             weight_decay=float(training_config["weight_decay"]),
+            early_stopping_patience=int(training_config["early_stopping_patience"]),
+            early_stopping_min_delta=float(training_config["early_stopping_min_delta"]),
+            scheduler_factor=float(training_config["scheduler_factor"]),
+            scheduler_patience=int(training_config["scheduler_patience"]),
+            scheduler_min_lr=float(training_config["scheduler_min_lr"]),
+            pos_weight=pos_weight,
+            amp_requested=bool(training_config["amp_enabled"]),
+            configuration=checkpoint_configuration,
+            resume_checkpoint=resume_checkpoint,
             device=device,
             max_batches=1 if args.dry_run else None,
         )
@@ -164,6 +224,7 @@ def main() -> int:
 
     print(history.to_string(index=False))
     print(f"Outputs: {run_directory}")
+    print(f"Final run-directory size: {_directory_size_bytes(run_directory)} bytes")
     return 0
 
 

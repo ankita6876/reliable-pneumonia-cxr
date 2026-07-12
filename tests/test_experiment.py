@@ -39,6 +39,8 @@ def test_run_manifest_records_metadata_without_dataset_paths(tmp_path: Path) -> 
         train_sample_count=2,
         validation_sample_count=1,
         dry_run=True,
+        amp_enabled=False,
+        pos_weight=1.5,
     )
     saved_metadata = json.loads((run_directory / "run_manifest.json").read_text())
 
@@ -46,6 +48,8 @@ def test_run_manifest_records_metadata_without_dataset_paths(tmp_path: Path) -> 
     assert saved_metadata == metadata
     assert saved_metadata["split_manifest_filename"] == "patients.csv"
     assert saved_metadata["dry_run"] is True
+    assert saved_metadata["amp_enabled"] is False
+    assert saved_metadata["pos_weight"] == 1.5
     assert str(dataset_root) not in (run_directory / "run_manifest.json").read_text()
     assert "dataset_root" not in saved_metadata
 
@@ -85,6 +89,8 @@ def test_normal_run_manifest_marks_dry_run_false(tmp_path: Path) -> None:
         train_sample_count=10,
         validation_sample_count=5,
         dry_run=False,
+        amp_enabled=False,
+        pos_weight=None,
     )
 
     assert metadata["dry_run"] is False

@@ -7,8 +7,10 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 from torch import nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, Dataset
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +19,11 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from pneumonia_ai.training import engine  # noqa: E402
 from pneumonia_ai.training.engine import (  # noqa: E402
     UNCERTAIN_LABEL_STRATEGY,
+    EpochMetrics,
+    amp_is_enabled,
+    calculate_pos_weight,
+    create_development_loaders,
+    run_training,
     train_one_epoch,
     validate_one_epoch,
 )
@@ -120,3 +127,157 @@ def test_dry_run_disables_pretrained_weights(monkeypatch) -> None:
     )
 
     assert requested == {"name": "densenet121", "pretrained": False}
+
+
+def test_amp_is_disabled_on_cpu() -> None:
+    """AMP requests are safely disabled when the selected device is CPU."""
+    assert amp_is_enabled(True, torch.device("cpu")) is False
+
+
+def test_calculate_pos_weight_and_ablation_disable() -> None:
+    """Positive-class weighting uses the post-strategy train label balance."""
+    assert calculate_pos_weight([0, 0, 0, 1]) == 3.0
+    assert calculate_pos_weight([0, 1], enabled=False) is None
+
+
+def test_cpu_loaders_disable_pinning_and_persistent_workers() -> None:
+    """CPU development loaders avoid CUDA-specific worker memory settings."""
+    dataset = _ToyDataset()
+    train_loader, validation_loader = create_development_loaders(
+        dataset, dataset, batch_size=2, num_workers=0, seed=42
+    )
+
+    assert train_loader.pin_memory is False
+    assert validation_loader.persistent_workers is False
+
+
+def _training_arguments(tmp_path: Path) -> dict[str, object]:
+    """Return compact CPU-only settings for trainer control-flow tests."""
+    dataset = _ToyDataset()
+    loader = DataLoader(dataset, batch_size=2)
+    return {
+        "model": nn.Linear(2, 1),
+        "train_loader": loader,
+        "validation_loader": loader,
+        "output_dir": tmp_path,
+        "epochs": 4,
+        "learning_rate": 0.1,
+        "weight_decay": 0.0,
+        "early_stopping_patience": 2,
+        "early_stopping_min_delta": 0.01,
+        "scheduler_factor": 0.5,
+        "scheduler_patience": 0,
+        "scheduler_min_lr": 0.01,
+        "pos_weight": None,
+        "amp_requested": True,
+        "configuration": {"model": "toy", "training": "test"},
+        "device": torch.device("cpu"),
+    }
+
+
+def test_early_stopping_scheduler_and_best_checkpoint(monkeypatch, tmp_path: Path) -> None:
+    """Plateau loss lowers LR and non-improving AUROC stops after configured patience."""
+    validation_metrics = iter(
+        [
+            EpochMetrics(loss=1.0, auroc=0.8, auprc=0.7),
+            EpochMetrics(loss=1.0, auroc=0.8, auprc=0.7),
+            EpochMetrics(loss=1.0, auroc=0.8, auprc=0.7),
+        ]
+    )
+    monkeypatch.setattr(engine, "train_one_epoch", lambda *args: EpochMetrics(loss=1.0))
+    monkeypatch.setattr(engine, "validate_one_epoch", lambda *args: next(validation_metrics))
+
+    history = run_training(**_training_arguments(tmp_path))
+
+    checkpoint_paths = list(tmp_path.glob("*.pt"))
+    checkpoint = torch.load(checkpoint_paths[0], map_location="cpu", weights_only=False)
+    assert len(history) == 3
+    assert history.loc[1, "learning_rate"] == 0.05
+    assert len(checkpoint_paths) == 1
+    assert set(checkpoint) >= {
+        "model_state_dict",
+        "optimizer_state_dict",
+        "scheduler_state_dict",
+        "epoch",
+        "best_validation_auroc",
+        "configuration",
+    }
+
+
+def test_resume_restores_best_checkpoint_and_rejects_incompatible_config(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Resume continues in place from checkpoint state and rejects configuration drift."""
+    first_validation_metrics = iter(
+        [EpochMetrics(loss=1.0, auroc=0.8, auprc=0.7)]
+    )
+    monkeypatch.setattr(engine, "train_one_epoch", lambda *args: EpochMetrics(loss=1.0))
+    monkeypatch.setattr(
+        engine, "validate_one_epoch", lambda *args: next(first_validation_metrics)
+    )
+    arguments = _training_arguments(tmp_path)
+    arguments["epochs"] = 1
+    run_training(**arguments)
+    checkpoint_path = tmp_path / "best_validation_auroc.pt"
+
+    resumed_validation_metrics = iter([EpochMetrics(loss=0.9, auroc=0.9, auprc=0.8)])
+    monkeypatch.setattr(
+        engine, "validate_one_epoch", lambda *args: next(resumed_validation_metrics)
+    )
+    arguments["epochs"] = 2
+    history = run_training(**arguments, resume_checkpoint=checkpoint_path)
+
+    assert history["epoch"].tolist() == [1, 2]
+    incompatible = dict(arguments)
+    incompatible["configuration"] = {"model": "other"}
+    with pytest.raises(ValueError, match="incompatible"):
+        run_training(**incompatible, resume_checkpoint=checkpoint_path)
+
+
+def test_atomic_checkpoint_is_loadable_and_preserves_previous_checkpoint_on_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Atomic save leaves no temporary file and never destroys a valid prior checkpoint."""
+    model = nn.Linear(2, 1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1)
+    scheduler = ReduceLROnPlateau(optimizer, mode="min")
+    scaler = torch.amp.GradScaler("cuda", enabled=False)
+    checkpoint_path = tmp_path / "best_validation_auroc.pt"
+    configuration = {"model": "toy"}
+
+    engine._save_checkpoint_atomic(
+        checkpoint_path,
+        model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        scaler=scaler,
+        epoch=1,
+        best_validation_auroc=0.8,
+        configuration=configuration,
+    )
+
+    temporary_path = tmp_path / "best_validation_auroc.tmp.pt"
+    saved_checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert checkpoint_path.is_file()
+    assert not temporary_path.exists()
+    assert saved_checkpoint["epoch"] == 1
+
+    def failing_save(*args, **kwargs) -> None:
+        raise RuntimeError("simulated checkpoint write failure")
+
+    monkeypatch.setattr(engine.torch, "save", failing_save)
+    with pytest.raises(RuntimeError, match="simulated checkpoint write failure"):
+        engine._save_checkpoint_atomic(
+            checkpoint_path,
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scaler=scaler,
+            epoch=2,
+            best_validation_auroc=0.9,
+            configuration=configuration,
+        )
+
+    preserved_checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert not temporary_path.exists()
+    assert preserved_checkpoint["epoch"] == 1

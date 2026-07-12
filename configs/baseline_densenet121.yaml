@@ -4,9 +4,16 @@ model:
   name: densenet121
   pretrained: true
 training:
-  epochs: 10
+  epochs: 20
   batch_size: 16
   learning_rate: 0.0001
   num_workers: 0
   weight_decay: 0.00001
   image_size: 224
+  early_stopping_patience: 4
+  early_stopping_min_delta: 0.001
+  scheduler_factor: 0.5
+  scheduler_patience: 2
+  scheduler_min_lr: 0.000001
+  amp_enabled: true
+  class_weighting: true

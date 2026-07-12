@@ -73,6 +73,8 @@ def write_run_manifest(
     train_sample_count: int,
     validation_sample_count: int,
     dry_run: bool,
+    amp_enabled: bool,
+    pos_weight: float | None,
 ) -> dict[str, Any]:
     """Write a run manifest that excludes dataset and absolute filesystem paths."""
     cuda_available = torch.cuda.is_available()
@@ -94,6 +96,8 @@ def write_run_manifest(
         "train_sample_count": train_sample_count,
         "validation_sample_count": validation_sample_count,
         "dry_run": dry_run,
+        "amp_enabled": amp_enabled,
+        "pos_weight": pos_weight,
     }
     if cuda_available:
         metadata["cuda_device_name"] = torch.cuda.get_device_name(device)
