@@ -15,7 +15,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from pneumonia_ai.training import engine  # noqa: E402
-from pneumonia_ai.training.engine import train_one_epoch, validate_one_epoch  # noqa: E402
+from pneumonia_ai.training.engine import (  # noqa: E402
+    UNCERTAIN_LABEL_STRATEGY,
+    train_one_epoch,
+    validate_one_epoch,
+)
 from pneumonia_ai.training.seed import seed_everything  # noqa: E402
 
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -98,6 +102,7 @@ def test_development_dataset_builder_never_requests_test_split(
     )
 
     assert requested_splits == ["train", "validation"]
+    assert UNCERTAIN_LABEL_STRATEGY == "ignore"
 
 
 def test_dry_run_disables_pretrained_weights(monkeypatch) -> None:

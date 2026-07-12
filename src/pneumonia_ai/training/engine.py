@@ -18,6 +18,7 @@ from pneumonia_ai.training.seed import seed_worker
 
 
 DEVELOPMENT_SPLITS = ("train", "validation")
+UNCERTAIN_LABEL_STRATEGY = "ignore"
 
 
 @dataclass(frozen=True)
@@ -42,12 +43,12 @@ def build_train_validation_datasets(
     validation_transform: Callable[[object], object],
     max_samples_per_split: int | None = None,
 ) -> tuple[CheXpertPneumoniaDataset, CheXpertPneumoniaDataset]:
-    """Apply ``ignore`` to development rows before creating train/validation datasets."""
+    """Apply the initial ``ignore`` strategy before creating development datasets."""
     manifest = pd.read_csv(manifest_path)
     if "split" not in manifest:
         raise ValueError("Split manifest is missing required column: split")
     development_records = manifest.loc[manifest["split"].isin(DEVELOPMENT_SPLITS)]
-    binary_records = apply_label_strategy(development_records, "ignore")
+    binary_records = apply_label_strategy(development_records, UNCERTAIN_LABEL_STRATEGY)
     if max_samples_per_split is not None:
         binary_records = binary_records.groupby("split", group_keys=False).head(
             max_samples_per_split
@@ -55,7 +56,9 @@ def build_train_validation_datasets(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    filtered_manifest_path = output_path / "manifest_ignore_development.csv"
+    filtered_manifest_path = (
+        output_path / f"manifest_{UNCERTAIN_LABEL_STRATEGY}_development.csv"
+    )
     binary_records.to_csv(filtered_manifest_path, index=False)
     return (
         CheXpertPneumoniaDataset(root, filtered_manifest_path, "train", train_transform),

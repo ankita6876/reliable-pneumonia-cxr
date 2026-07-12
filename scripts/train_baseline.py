@@ -12,9 +12,16 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from pneumonia_ai.models.factory import create_model  # noqa: E402
 from pneumonia_ai.training.engine import (  # noqa: E402
+    UNCERTAIN_LABEL_STRATEGY,
     build_train_validation_datasets,
     create_development_loaders,
     run_training,
+    select_device,
+)
+from pneumonia_ai.training.experiment import (  # noqa: E402
+    create_run_directory,
+    write_resolved_config,
+    write_run_manifest,
 )
 from pneumonia_ai.training.seed import seed_everything  # noqa: E402
 
@@ -89,13 +96,26 @@ def main() -> int:
     seed = int(config["seed"])
     output_dir = Path(str(config["output_dir"]))
     image_size = int(training_config["image_size"])
+    model_name = model_config.get("name")
+    pretrained = model_config.get("pretrained")
+    if not isinstance(model_name, str) or not isinstance(pretrained, bool):
+        raise ValueError("Configuration model.name and model.pretrained are required.")
+    effective_batch_size = (
+        min(int(training_config["batch_size"]), 2)
+        if args.dry_run
+        else int(training_config["batch_size"])
+    )
+    effective_epochs = 1 if args.dry_run else int(training_config["epochs"])
+    effective_pretrained = False if args.dry_run else pretrained
+    run_directory, run_id, timestamp = create_run_directory(output_dir, model_name)
+    write_resolved_config(run_directory, config, args.dry_run)
     seed_everything(seed)
     train_transform, validation_transform = _transforms(image_size)
     try:
         train_dataset, validation_dataset = build_train_validation_datasets(
             args.root,
             args.manifest,
-            output_dir,
+            run_directory,
             train_transform,
             validation_transform,
             max_samples_per_split=2 if args.dry_run else None,
@@ -103,19 +123,39 @@ def main() -> int:
         train_loader, validation_loader = create_development_loaders(
             train_dataset,
             validation_dataset,
-            batch_size=min(int(training_config["batch_size"]), 2) if args.dry_run else int(training_config["batch_size"]),
+            batch_size=effective_batch_size,
             num_workers=int(training_config["num_workers"]),
             seed=seed,
         )
         model = _create_model_from_config(model_config, args.dry_run)
+        device = select_device()
+        write_run_manifest(
+            run_directory,
+            run_id=run_id,
+            timestamp=timestamp,
+            model_name=model_name,
+            pretrained=effective_pretrained,
+            uncertain_label_strategy=UNCERTAIN_LABEL_STRATEGY,
+            seed=seed,
+            image_size=image_size,
+            batch_size=effective_batch_size,
+            learning_rate=float(training_config["learning_rate"]),
+            epoch_count=effective_epochs,
+            device=device,
+            split_manifest_path=args.manifest,
+            train_sample_count=len(train_dataset),
+            validation_sample_count=len(validation_dataset),
+            dry_run=args.dry_run,
+        )
         history = run_training(
             model,
             train_loader,
             validation_loader,
-            output_dir,
-            epochs=1 if args.dry_run else int(training_config["epochs"]),
+            run_directory,
+            epochs=effective_epochs,
             learning_rate=float(training_config["learning_rate"]),
             weight_decay=float(training_config["weight_decay"]),
+            device=device,
             max_batches=1 if args.dry_run else None,
         )
     except (FileNotFoundError, ValueError) as error:
@@ -123,7 +163,7 @@ def main() -> int:
         return 1
 
     print(history.to_string(index=False))
-    print(f"Outputs: {output_dir}")
+    print(f"Outputs: {run_directory}")
     return 0
 
 
