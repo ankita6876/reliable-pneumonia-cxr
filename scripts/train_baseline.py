@@ -5,6 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 import sys
 
+import torch
 from torchvision import transforms
 import yaml
 
@@ -32,6 +33,8 @@ from pneumonia_ai.training.seed import seed_everything  # noqa: E402
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+IMAGENET_PREPROCESSING = "imagenet"
+XRV_PREPROCESSING = "torchxrayvision"
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,24 +61,56 @@ def _load_config(config_path: Path | str) -> dict[str, object]:
         return yaml.safe_load(config_file)
 
 
-def _transforms(image_size: int) -> tuple[transforms.Compose, transforms.Compose]:
-    """Return allowed baseline training and deterministic validation transforms."""
-    normalize = transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+def _xrv_normalize(image: torch.Tensor) -> torch.Tensor:
+    """Map an 8-bit tensor to TorchXRayVision's [-1024, 1024] convention."""
+    return image.mul(2048.0).sub(1024.0)
+
+
+def _transforms(
+    image_size: int, preprocessing: str = IMAGENET_PREPROCESSING
+) -> tuple[transforms.Compose, transforms.Compose]:
+    """Return model-configured training and deterministic validation transforms."""
+    if preprocessing == IMAGENET_PREPROCESSING:
+        normalize = transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+        train_transform = transforms.Compose(
+            [
+                transforms.Resize((image_size, image_size)),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(7),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        )
+        validation_transform = transforms.Compose(
+            [
+                transforms.Resize((image_size, image_size)),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        )
+        return train_transform, validation_transform
+    if preprocessing != XRV_PREPROCESSING:
+        raise ValueError(
+            "Configuration model.preprocessing must be 'imagenet' or 'torchxrayvision'."
+        )
+    if image_size != 224:
+        raise ValueError("TorchXRayVision DenseNet121 requires image_size 224.")
+    xrv_base = [
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize(image_size),
+        transforms.CenterCrop(image_size),
+    ]
     train_transform = transforms.Compose(
         [
-            transforms.Resize((image_size, image_size)),
+            *xrv_base,
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(7),
             transforms.ToTensor(),
-            normalize,
+            transforms.Lambda(_xrv_normalize),
         ]
     )
     validation_transform = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size)),
-            transforms.ToTensor(),
-            normalize,
-        ]
+        [*xrv_base, transforms.ToTensor(), transforms.Lambda(_xrv_normalize)]
     )
     return train_transform, validation_transform
 
@@ -167,8 +202,11 @@ def main() -> int:
             raise ValueError("Resume run directory is missing config.yaml.")
         run_id = "resumed"
         timestamp = "resumed"
+    preprocessing = model_config.get("preprocessing", IMAGENET_PREPROCESSING)
+    if not isinstance(preprocessing, str):
+        raise ValueError("Configuration model.preprocessing must be a string.")
     seed_everything(seed)
-    train_transform, validation_transform = _transforms(image_size)
+    train_transform, validation_transform = _transforms(image_size, preprocessing)
     try:
         train_dataset, validation_dataset = build_train_validation_datasets(
             args.root,

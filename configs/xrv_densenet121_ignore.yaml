@@ -1,11 +1,11 @@
 seed: 42
-output_dir: outputs/convnext_u_one
+output_dir: outputs/xrv_densenet121_ignore
 model:
-  name: convnext_tiny
+  name: xrv_densenet121_all
   pretrained: true
-  preprocessing: imagenet
+  preprocessing: torchxrayvision
 label_strategy:
-  name: u_one
+  name: ignore
   uncertain_soft_target: 0.5
   uncertain_sample_weight: 0.5
 training:

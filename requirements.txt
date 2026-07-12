@@ -1,6 +1,7 @@
 torch
 torchvision
 timm
+torchxrayvision
 pandas
 numpy
 scikit-learn

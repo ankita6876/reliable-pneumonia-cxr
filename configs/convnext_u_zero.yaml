@@ -3,6 +3,7 @@ output_dir: outputs/convnext_u_zero
 model:
   name: convnext_tiny
   pretrained: true
+  preprocessing: imagenet
 label_strategy:
   name: u_zero
   uncertain_soft_target: 0.5

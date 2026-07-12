@@ -3,6 +3,7 @@ output_dir: outputs/efficientnetv2_s
 model:
   name: tf_efficientnetv2_s
   pretrained: true
+  preprocessing: imagenet
 label_strategy:
   name: ignore
   uncertain_soft_target: 0.5

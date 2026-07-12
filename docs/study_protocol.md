@@ -116,6 +116,16 @@ Test data must not be used for model selection, threshold tuning, or other devel
   logit; pretrained ImageNet weights are a configurable initialization option.
 - Training configuration: the same shared initial protocol as DenseNet121.
 
+### TorchXRayVision DenseNet121 (all datasets)
+
+- Role: predefined domain-pretraining comparison, not a proposed final model.
+- Architecture and initialization: TorchXRayVision DenseNet121 with the
+  `densenet121-res224-all` chest-X-ray weights when enabled; its multi-pathology classifier is
+  replaced with one binary pneumonia logit.
+- Training configuration: uses one-channel TorchXRayVision preprocessing and the same
+  patient-level `ignore`, train/validation-only protocol, seed, optimizer, scheduler, AMP,
+  early stopping, class weighting, and definite-label validation selection as ConvNeXt-Tiny.
+
 No architecture is designated the winner before evaluation.
 
 ## 8. Planned Experiments

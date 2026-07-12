@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+from PIL import Image
 import pytest
 import torch
 from torch import nn
@@ -128,6 +129,43 @@ def test_dry_run_disables_pretrained_weights(monkeypatch) -> None:
     )
 
     assert requested == {"name": "densenet121", "pretrained": False}
+
+
+def test_xrv_dry_run_disables_pretrained_weights(monkeypatch) -> None:
+    """The domain-pretrained model also avoids weight downloads during dry runs."""
+    requested: dict[str, object] = {}
+
+    def fake_create_model(name: str, pretrained: bool) -> SimpleNamespace:
+        requested.update(name=name, pretrained=pretrained)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(train_baseline, "create_model", fake_create_model)
+
+    train_baseline._create_model_from_config(
+        {"name": "xrv_densenet121_all", "pretrained": True}, dry_run=True
+    )
+
+    assert requested == {"name": "xrv_densenet121_all", "pretrained": False}
+
+
+def test_torchxrayvision_transform_is_single_channel_and_uses_xrv_range() -> None:
+    """XRV preprocessing preserves grayscale and avoids ImageNet RGB normalization."""
+    _, validation_transform = train_baseline._transforms(224, "torchxrayvision")
+
+    transformed = validation_transform(Image.new("RGB", (300, 250), color=0))
+
+    assert transformed.shape == (1, 224, 224)
+    assert torch.all(transformed == -1024.0)
+
+
+def test_transform_factory_selects_requested_preprocessing() -> None:
+    """ImageNet and TorchXRayVision paths produce their model-specific channel counts."""
+    _, imagenet_validation = train_baseline._transforms(224, "imagenet")
+    _, xrv_validation = train_baseline._transforms(224, "torchxrayvision")
+    image = Image.new("RGB", (224, 224), color=128)
+
+    assert imagenet_validation(image).shape == (3, 224, 224)
+    assert xrv_validation(image).shape == (1, 224, 224)
 
 
 def test_amp_is_disabled_on_cpu() -> None:
