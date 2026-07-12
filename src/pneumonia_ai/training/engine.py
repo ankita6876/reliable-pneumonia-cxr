@@ -44,15 +44,24 @@ def amp_is_enabled(requested: bool, device: torch.device) -> bool:
 
 
 def calculate_pos_weight(labels: Iterable[float | int], enabled: bool = True) -> float | None:
-    """Return BCE positive-class weight after the selected label strategy is applied."""
+    """Return negative-to-positive target mass after the selected strategy."""
     if not enabled:
         return None
-    values = [int(label) for label in labels]
-    positives = sum(value == 1 for value in values)
-    negatives = sum(value == 0 for value in values)
-    if positives == 0 or negatives == 0:
+    values = [float(label) for label in labels]
+    positive_mass = sum(values)
+    negative_mass = sum(1.0 - value for value in values)
+    if positive_mass == 0.0 or negative_mass == 0.0:
         return 1.0
-    return negatives / positives
+    return negative_mass / positive_mass
+
+
+def count_raw_training_labels(manifest_path: Path | str) -> tuple[int, int]:
+    """Return definite and uncertain counts from the original train split."""
+    manifest = pd.read_csv(manifest_path)
+    train_labels = pd.to_numeric(
+        manifest.loc[manifest["split"] == "train", "pneumonia_label"], errors="coerce"
+    )
+    return int(train_labels.isin([0, 1]).sum()), int((train_labels == -1).sum())
 
 
 def build_train_validation_datasets(
@@ -61,15 +70,34 @@ def build_train_validation_datasets(
     output_dir: Path | str,
     train_transform: Callable[[object], object],
     validation_transform: Callable[[object], object],
+    label_strategy: str = UNCERTAIN_LABEL_STRATEGY,
+    uncertain_soft_target: float = 0.5,
+    uncertain_sample_weight: float = 0.5,
     max_samples_per_split: int | None = None,
 ) -> tuple[CheXpertPneumoniaDataset, CheXpertPneumoniaDataset]:
-    """Build only ignored-label train/validation datasets without persisting a manifest."""
+    """Build strategy-specific training and definite-label validation datasets."""
     del output_dir  # Run directories retain only the prescribed final artifacts.
     manifest = pd.read_csv(manifest_path)
     if "split" not in manifest:
         raise ValueError("Split manifest is missing required column: split")
-    development_records = manifest.loc[manifest["split"].isin(DEVELOPMENT_SPLITS)]
-    binary_records = apply_label_strategy(development_records, UNCERTAIN_LABEL_STRATEGY)
+    train_records = manifest.loc[manifest["split"] == "train"]
+    validation_records = manifest.loc[manifest["split"] == "validation"]
+    training_records = apply_label_strategy(
+        train_records,
+        label_strategy,
+        uncertain_soft_target=uncertain_soft_target,
+        uncertain_sample_weight=uncertain_sample_weight,
+    )
+    definite_validation_records = validation_records.loc[
+        pd.to_numeric(validation_records["pneumonia_label"], errors="coerce").isin([0, 1])
+    ]
+    validation_training_records = apply_label_strategy(
+        definite_validation_records,
+        label_strategy,
+        uncertain_soft_target=uncertain_soft_target,
+        uncertain_sample_weight=uncertain_sample_weight,
+    )
+    binary_records = pd.concat([training_records, validation_training_records])
     if max_samples_per_split is not None:
         binary_records = binary_records.groupby("split", group_keys=False).head(
             max_samples_per_split
@@ -125,11 +153,12 @@ def train_one_epoch(
     batch_count = 0
     for batch in loader:
         images = batch["image"].to(device, non_blocking=True)
-        labels = batch["label"].to(device, non_blocking=True).float().view(-1)
+        labels = _batch_targets(batch, device)
+        sample_weights = _batch_sample_weights(batch, labels, device)
         optimizer.zero_grad(set_to_none=True)
         with torch.amp.autocast(device.type, enabled=amp_enabled):
             logits = model(images).view(-1)
-            loss = criterion(logits, labels)
+            loss = _weighted_mean_loss(criterion(logits, labels), sample_weights)
         if scaler is None:
             loss.backward()
             optimizer.step()
@@ -163,10 +192,16 @@ def validate_one_epoch(
     with torch.no_grad():
         for batch in loader:
             images = batch["image"].to(device, non_blocking=True)
-            batch_labels = batch["label"].to(device, non_blocking=True).float().view(-1)
+            batch_labels = _batch_targets(batch, device)
+            raw_labels = _batch_raw_labels(batch, batch_labels, device)
+            definite_mask = (raw_labels == 0.0) | (raw_labels == 1.0)
+            if not definite_mask.any():
+                continue
+            batch_labels = batch_labels[definite_mask]
+            sample_weights = _batch_sample_weights(batch, raw_labels, device)[definite_mask]
             with torch.amp.autocast(device.type, enabled=amp_enabled):
-                logits = model(images).view(-1)
-                loss = criterion(logits, batch_labels)
+                logits = model(images).view(-1)[definite_mask]
+                loss = _weighted_mean_loss(criterion(logits, batch_labels), sample_weights)
             total_loss += loss.item()
             batch_count += 1
             labels.extend(batch_labels.cpu().tolist())
@@ -211,7 +246,8 @@ def run_training(
     amp_enabled = amp_is_enabled(amp_requested, device)
     model.to(device)
     criterion = nn.BCEWithLogitsLoss(
-        pos_weight=None if pos_weight is None else torch.tensor(pos_weight, device=device)
+        reduction="none",
+        pos_weight=None if pos_weight is None else torch.tensor(pos_weight, device=device),
     )
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay
@@ -288,6 +324,35 @@ def run_training(
 def _load_history(history_path: Path) -> list[dict[str, object]]:
     """Load prior compact history only when a run is being resumed."""
     return [] if not history_path.exists() else pd.read_csv(history_path).to_dict("records")
+
+
+def _batch_targets(batch: dict[str, object], device: torch.device) -> torch.Tensor:
+    """Read a training target while accepting pre-framework test batches."""
+    values = batch.get("target", batch["label"])
+    return values.to(device, non_blocking=True).float().view(-1)
+
+
+def _batch_raw_labels(
+    batch: dict[str, object], targets: torch.Tensor, device: torch.device
+) -> torch.Tensor:
+    """Read raw labels, defaulting to targets for legacy definite-label batches."""
+    values = batch.get("raw_label")
+    return targets if values is None else values.to(device, non_blocking=True).float().view(-1)
+
+
+def _batch_sample_weights(
+    batch: dict[str, object], reference: torch.Tensor, device: torch.device
+) -> torch.Tensor:
+    """Read loss weights, defaulting to one for legacy definite-label batches."""
+    values = batch.get("sample_weight")
+    if values is None:
+        return torch.ones_like(reference, device=device)
+    return values.to(device, non_blocking=True).float().view(-1)
+
+
+def _weighted_mean_loss(losses: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
+    """Apply per-sample weights to unreduced BCE loss before averaging."""
+    return (losses * weights).sum() / weights.sum()
 
 
 def _restore_checkpoint(

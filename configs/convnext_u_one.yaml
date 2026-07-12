@@ -1,10 +1,10 @@
 seed: 42
-output_dir: outputs/efficientnetv2_s
+output_dir: outputs/convnext_u_one
 model:
-  name: tf_efficientnetv2_s
+  name: convnext_tiny
   pretrained: true
 label_strategy:
-  name: ignore
+  name: u_one
   uncertain_soft_target: 0.5
   uncertain_sample_weight: 0.5
 training:

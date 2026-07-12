@@ -49,6 +49,17 @@ def test_ignore_removes_uncertain_rows_and_preserves_retained_order() -> None:
     assert result["pneumonia_label"].tolist() == [1, 0]
 
 
+def test_soft_uncertain_preserves_raw_labels_and_configures_targets_and_weights() -> None:
+    """Soft uncertainty retains all rows while down-weighting uncertain supervision."""
+    result = apply_label_strategy(
+        _records(), "soft_uncertain", uncertain_soft_target=0.4, uncertain_sample_weight=0.3
+    )
+
+    assert result["raw_pneumonia_label"].tolist() == [1, -1, 0]
+    assert result["training_target"].tolist() == pytest.approx([1.0, 0.4, 0.0])
+    assert result["sample_loss_weight"].tolist() == pytest.approx([1.0, 0.3, 1.0])
+
+
 def test_input_dataframe_is_not_modified() -> None:
     """Every strategy operates on a new DataFrame rather than mutating the input."""
     records = _records()

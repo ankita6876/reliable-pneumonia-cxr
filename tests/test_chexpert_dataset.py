@@ -59,6 +59,9 @@ def test_filters_requested_split_and_preserves_all_labels(tmp_path: Path) -> Non
 
     assert len(dataset) == 3
     assert [dataset[index]["label"].item() for index in range(len(dataset))] == [1.0, 0.0, -1.0]
+    assert dataset[0]["target"].item() == 1.0
+    assert dataset[0]["sample_weight"].item() == 1.0
+    assert dataset[2]["raw_label"].item() == -1.0
 
 
 def test_converts_grayscale_to_rgb_and_applies_transform(tmp_path: Path) -> None:

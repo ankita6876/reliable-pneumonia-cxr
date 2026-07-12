@@ -1,7 +1,7 @@
 seed: 42
-output_dir: outputs/efficientnetv2_s
+output_dir: outputs/convnext_ignore
 model:
-  name: tf_efficientnetv2_s
+  name: convnext_tiny
   pretrained: true
 label_strategy:
   name: ignore

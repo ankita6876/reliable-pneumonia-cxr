@@ -40,9 +40,13 @@
 - Local path: [Specify local path; do not commit data to GitHub.]
 - Label definition and uncertainty handling: Frontal images with Pneumonia labels `1`, `0`,
   or `-1` are eligible. Missing Pneumonia labels are excluded. Uncertain (`-1`) labels are
-  retained without transformation in the source cohort. Three predefined uncertainty-label
-  experiments will be compared: `u_zero` maps `-1` to `0`, `u_one` maps `-1` to `1`, and
-  `ignore` excludes `-1` records. No strategy is designated as best before evaluation.
+  retained without transformation in the source cohort. Four predefined uncertainty-label
+  experiments will be compared: `ignore` excludes `-1` records; `u_zero` maps `-1` to `0`;
+  `u_one` maps `-1` to `1`; and `soft_uncertain` assigns uncertain rows a configurable soft
+  target (initially 0.5) and lower loss weight (initially 0.5). Raw labels remain available for
+  analysis. Training may include uncertain rows according to strategy, but validation model
+  selection uses only definite `0`/`1` labels for directly comparable AUROC and AUPRC. No
+  strategy is designated as best before evaluation.
 - Intended role: CheXpert `train.csv` supplies the eligible development cohort; the official
   `valid.csv` is reserved as a secondary evaluation set.
 
@@ -95,7 +99,8 @@ Test data must not be used for model selection, threshold tuning, or other devel
 - Architecture and initialization: timm `densenet121`, configured for one binary output logit;
   pretrained ImageNet weights are a configurable initialization option.
 - Training configuration: the shared initial protocol uses 224x224 inputs, ImageNet
-  normalization, BCEWithLogitsLoss, ignored uncertain labels, and train/validation splits only.
+  normalization, weighted BCEWithLogitsLoss, the predefined uncertainty-label experiments, and
+  train/validation splits only; validation selection is restricted to definite labels.
 
 ### ConvNeXt-Tiny
 

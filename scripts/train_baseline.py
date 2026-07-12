@@ -17,6 +17,7 @@ from pneumonia_ai.training.engine import (  # noqa: E402
     amp_is_enabled,
     build_train_validation_datasets,
     calculate_pos_weight,
+    count_raw_training_labels,
     create_development_loaders,
     run_training,
     select_device,
@@ -105,6 +106,19 @@ def _checkpoint_configuration(config: dict[str, object], dry_run: bool) -> dict[
     return checkpoint_config
 
 
+def _label_settings(config: dict[str, object]) -> tuple[str, float, float]:
+    """Read the predefined uncertainty strategy and its soft-label settings."""
+    label_config = config.get("label_strategy", {"name": UNCERTAIN_LABEL_STRATEGY})
+    if not isinstance(label_config, dict):
+        raise ValueError("Configuration label_strategy must be a mapping.")
+    strategy = label_config.get("name", UNCERTAIN_LABEL_STRATEGY)
+    soft_target = label_config.get("uncertain_soft_target", 0.5)
+    sample_weight = label_config.get("uncertain_sample_weight", 0.5)
+    if not isinstance(strategy, str):
+        raise ValueError("Configuration label_strategy.name must be a string.")
+    return strategy, float(soft_target), float(sample_weight)
+
+
 def _resume_checkpoint(path: str) -> Path:
     """Resolve a user-supplied run directory or its sole best checkpoint."""
     candidate = Path(path)
@@ -130,6 +144,7 @@ def main() -> int:
     seed = int(config["seed"])
     output_dir = Path(str(config["output_dir"]))
     image_size = int(training_config["image_size"])
+    label_strategy, uncertain_soft_target, uncertain_sample_weight = _label_settings(config)
     model_name = model_config.get("name")
     pretrained = model_config.get("pretrained")
     if not isinstance(model_name, str) or not isinstance(pretrained, bool):
@@ -161,6 +176,9 @@ def main() -> int:
             run_directory,
             train_transform,
             validation_transform,
+            label_strategy=label_strategy,
+            uncertain_soft_target=uncertain_soft_target,
+            uncertain_sample_weight=uncertain_sample_weight,
             max_samples_per_split=2 if args.dry_run else None,
         )
         train_loader, validation_loader = create_development_loaders(
@@ -174,7 +192,10 @@ def main() -> int:
         device = select_device()
         amp_enabled = amp_is_enabled(bool(training_config["amp_enabled"]), device)
         pos_weight = calculate_pos_weight(
-            train_dataset._labels, bool(training_config["class_weighting"])
+            train_dataset._targets, bool(training_config["class_weighting"])
+        )
+        definite_training_count, uncertain_training_count = count_raw_training_labels(
+            args.manifest
         )
         checkpoint_configuration = _checkpoint_configuration(config, args.dry_run)
         if resume_checkpoint is None:
@@ -184,7 +205,7 @@ def main() -> int:
                 timestamp=timestamp,
                 model_name=model_name,
                 pretrained=effective_pretrained,
-                uncertain_label_strategy=UNCERTAIN_LABEL_STRATEGY,
+                uncertain_label_strategy=label_strategy,
                 seed=seed,
                 image_size=image_size,
                 batch_size=effective_batch_size,
@@ -197,6 +218,12 @@ def main() -> int:
                 dry_run=args.dry_run,
                 amp_enabled=amp_enabled,
                 pos_weight=pos_weight,
+                uncertain_soft_target=uncertain_soft_target,
+                uncertain_sample_weight=uncertain_sample_weight,
+                definite_training_sample_count=definite_training_count,
+                uncertain_training_sample_count=uncertain_training_count,
+                effective_training_sample_count=len(train_dataset),
+                definite_validation_sample_count=len(validation_dataset),
             )
         history = run_training(
             model,

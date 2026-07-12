@@ -41,15 +41,24 @@ def test_run_manifest_records_metadata_without_dataset_paths(tmp_path: Path) -> 
         dry_run=True,
         amp_enabled=False,
         pos_weight=1.5,
+        uncertain_soft_target=0.5,
+        uncertain_sample_weight=0.5,
+        definite_training_sample_count=10,
+        uncertain_training_sample_count=7,
+        effective_training_sample_count=17,
+        definite_validation_sample_count=3,
     )
     saved_metadata = json.loads((run_directory / "run_manifest.json").read_text())
 
     assert run_directory.name == f"densenet121_{timestamp}_{run_id}"
     assert saved_metadata == metadata
     assert saved_metadata["split_manifest_filename"] == "patients.csv"
+    assert saved_metadata["label_strategy"] == "ignore"
     assert saved_metadata["dry_run"] is True
     assert saved_metadata["amp_enabled"] is False
     assert saved_metadata["pos_weight"] == 1.5
+    assert saved_metadata["uncertain_training_sample_count"] == 7
+    assert saved_metadata["definite_validation_sample_count"] == 3
     assert str(dataset_root) not in (run_directory / "run_manifest.json").read_text()
     assert "dataset_root" not in saved_metadata
 
@@ -91,6 +100,12 @@ def test_normal_run_manifest_marks_dry_run_false(tmp_path: Path) -> None:
         dry_run=False,
         amp_enabled=False,
         pos_weight=None,
+        uncertain_soft_target=0.5,
+        uncertain_sample_weight=0.5,
+        definite_training_sample_count=10,
+        uncertain_training_sample_count=0,
+        effective_training_sample_count=10,
+        definite_validation_sample_count=5,
     )
 
     assert metadata["dry_run"] is False

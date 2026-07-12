@@ -69,17 +69,35 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         records = manifest.loc[manifest["split"] == split].copy()
         if records.empty:
             raise DatasetValidationError(f"Requested split {split!r} contains no rows.")
-        labels = pd.to_numeric(records["pneumonia_label"], errors="coerce")
-        invalid_labels = labels.isna() | ~labels.isin(VALID_LABELS)
+        raw_label_column = (
+            "raw_pneumonia_label" if "raw_pneumonia_label" in records else "pneumonia_label"
+        )
+        raw_labels = pd.to_numeric(records[raw_label_column], errors="coerce")
+        invalid_labels = raw_labels.isna() | ~raw_labels.isin(VALID_LABELS)
         if invalid_labels.any():
-            invalid_values = records.loc[invalid_labels, "pneumonia_label"].unique().tolist()
+            invalid_values = records.loc[invalid_labels, raw_label_column].unique().tolist()
             raise DatasetValidationError(
                 "Split manifest contains invalid Pneumonia labels; expected only 1, 0, or -1. "
                 f"Found: {invalid_values}"
             )
 
         self.records = records.reset_index(drop=True)
-        self._labels = labels.astype("int64").reset_index(drop=True)
+        self._raw_labels = raw_labels.astype("int64").reset_index(drop=True)
+        has_training_targets = "training_target" in records
+        target_values = records["training_target"] if has_training_targets else records["pneumonia_label"]
+        targets = pd.to_numeric(target_values, errors="coerce")
+        if targets.isna().any() or (has_training_targets and not targets.between(0.0, 1.0).all()):
+            raise DatasetValidationError("Training targets must be numeric values between 0 and 1.")
+        weight_values = (
+            records["sample_loss_weight"]
+            if "sample_loss_weight" in records
+            else pd.Series(1.0, index=records.index)
+        )
+        weights = pd.to_numeric(weight_values, errors="coerce")
+        if weights.isna().any() or (weights <= 0.0).any():
+            raise DatasetValidationError("Sample loss weights must be positive numeric values.")
+        self._targets = targets.astype("float32").reset_index(drop=True)
+        self._sample_loss_weights = weights.astype("float32").reset_index(drop=True)
         self._resolved_image_paths = [
             _resolve_manifest_image_path(self.dataset_root, image_path)
             for image_path in self.records["image_path"]
@@ -108,7 +126,12 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             image = self.transform(image)
         return {
             "image": image,
-            "label": torch.tensor(float(self._labels.iloc[index]), dtype=torch.float32),
+            "label": torch.tensor(float(self._targets.iloc[index]), dtype=torch.float32),
+            "target": torch.tensor(float(self._targets.iloc[index]), dtype=torch.float32),
+            "sample_weight": torch.tensor(
+                float(self._sample_loss_weights.iloc[index]), dtype=torch.float32
+            ),
+            "raw_label": torch.tensor(float(self._raw_labels.iloc[index]), dtype=torch.float32),
             "patient_id": row["patient_id"],
             "study_id": row["study_id"],
             "image_path": self._returned_image_paths[index],

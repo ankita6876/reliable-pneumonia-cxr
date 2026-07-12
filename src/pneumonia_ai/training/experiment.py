@@ -75,6 +75,12 @@ def write_run_manifest(
     dry_run: bool,
     amp_enabled: bool,
     pos_weight: float | None,
+    uncertain_soft_target: float,
+    uncertain_sample_weight: float,
+    definite_training_sample_count: int,
+    uncertain_training_sample_count: int,
+    effective_training_sample_count: int,
+    definite_validation_sample_count: int,
 ) -> dict[str, Any]:
     """Write a run manifest that excludes dataset and absolute filesystem paths."""
     cuda_available = torch.cuda.is_available()
@@ -84,6 +90,7 @@ def write_run_manifest(
         "model_name": model_name,
         "pretrained": pretrained,
         "uncertain_label_strategy": uncertain_label_strategy,
+        "label_strategy": uncertain_label_strategy,
         "random_seed": seed,
         "image_size": image_size,
         "batch_size": batch_size,
@@ -98,6 +105,12 @@ def write_run_manifest(
         "dry_run": dry_run,
         "amp_enabled": amp_enabled,
         "pos_weight": pos_weight,
+        "uncertain_soft_target": uncertain_soft_target,
+        "uncertain_sample_weight": uncertain_sample_weight,
+        "definite_training_sample_count": definite_training_sample_count,
+        "uncertain_training_sample_count": uncertain_training_sample_count,
+        "effective_training_sample_count": effective_training_sample_count,
+        "definite_validation_sample_count": definite_validation_sample_count,
     }
     if cuda_available:
         metadata["cuda_device_name"] = torch.cuda.get_device_name(device)

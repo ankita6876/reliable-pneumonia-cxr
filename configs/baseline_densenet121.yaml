@@ -3,6 +3,10 @@ output_dir: outputs/baseline_densenet121
 model:
   name: densenet121
   pretrained: true
+label_strategy:
+  name: ignore
+  uncertain_soft_target: 0.5
+  uncertain_sample_weight: 0.5
 training:
   epochs: 20
   batch_size: 16

@@ -22,6 +22,7 @@ from pneumonia_ai.training.engine import (  # noqa: E402
     EpochMetrics,
     amp_is_enabled,
     calculate_pos_weight,
+    count_raw_training_labels,
     create_development_loaders,
     run_training,
     train_one_epoch,
@@ -138,6 +139,95 @@ def test_calculate_pos_weight_and_ablation_disable() -> None:
     """Positive-class weighting uses the post-strategy train label balance."""
     assert calculate_pos_weight([0, 0, 0, 1]) == 3.0
     assert calculate_pos_weight([0, 1], enabled=False) is None
+    assert calculate_pos_weight([0.0, 0.5, 1.0]) == 1.0
+
+
+def test_raw_training_counts_preserve_uncertain_rows_before_strategy(tmp_path: Path) -> None:
+    """Run metadata distinguishes source uncertainty from the strategy's retained rows."""
+    manifest_path = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {"split": ["train", "train", "train", "validation"], "pneumonia_label": [0, 1, -1, -1]}
+    ).to_csv(manifest_path, index=False)
+
+    assert count_raw_training_labels(manifest_path) == (2, 1)
+
+
+def test_weighted_unreduced_loss_applies_sample_weights_before_averaging() -> None:
+    """The training reduction uses weighted per-sample BCE values, not batch mean BCE."""
+    loss = engine._weighted_mean_loss(
+        torch.tensor([2.0, 4.0]), torch.tensor([1.0, 0.5])
+    )
+
+    assert loss.item() == pytest.approx(4.0 / 1.5)
+
+
+class _UncertainValidationDataset(Dataset[dict[str, torch.Tensor]]):
+    """Definite labels plus a deliberately high-loss uncertain validation row."""
+
+    def __len__(self) -> int:
+        return 3
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        return {
+            "image": torch.tensor([0.0 if index < 2 else 100.0]),
+            "target": torch.tensor([0.0, 1.0, 0.5][index]),
+            "label": torch.tensor([0.0, 1.0, 0.5][index]),
+            "raw_label": torch.tensor([0.0, 1.0, -1.0][index]),
+            "sample_weight": torch.tensor(1.0),
+        }
+
+
+def test_validation_filters_uncertain_labels_for_comparable_selection() -> None:
+    """An uncertain validation row cannot affect validation loss, AUROC, or AUPRC."""
+    loader = DataLoader(_UncertainValidationDataset(), batch_size=3)
+    metrics = validate_one_epoch(
+        nn.Identity(),
+        loader,
+        nn.BCEWithLogitsLoss(reduction="none"),
+        torch.device("cpu"),
+    )
+
+    assert metrics.loss == pytest.approx(float(torch.log(torch.tensor(2.0))))
+    assert metrics.auroc == pytest.approx(0.5)
+    assert metrics.auprc == pytest.approx(0.5)
+
+
+def test_strategy_builds_share_definite_validation_records(tmp_path: Path, monkeypatch) -> None:
+    """All strategies train differently but select models on the same definite rows."""
+    manifest_path = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "split": ["train", "train", "train", "validation", "validation", "validation", "test"],
+            "pneumonia_label": [0, 1, -1, 0, 1, -1, 1],
+            "image_path": [f"image-{index}.jpg" for index in range(7)],
+        }
+    ).to_csv(manifest_path, index=False)
+    captured: dict[str, list[pd.DataFrame]] = {}
+
+    class FakeDataset:
+        def __init__(self, root, manifest, split, transform) -> None:
+            captured.setdefault(split, []).append(pd.read_csv(manifest))
+
+    monkeypatch.setattr(engine, "CheXpertPneumoniaDataset", FakeDataset)
+    validation_raw_labels: list[list[int]] = []
+    training_lengths: list[int] = []
+    for strategy in ("ignore", "u_zero", "u_one", "soft_uncertain"):
+        engine.build_train_validation_datasets(
+            tmp_path,
+            manifest_path,
+            tmp_path / "outputs",
+            lambda image: image,
+            lambda image: image,
+            label_strategy=strategy,
+        )
+        training_records, validation_records = captured["train"].pop(), captured["validation"].pop()
+        training_lengths.append(len(training_records.loc[training_records["split"] == "train"]))
+        validation_raw_labels.append(
+            validation_records.loc[validation_records["split"] == "validation", "raw_pneumonia_label"].tolist()
+        )
+
+    assert validation_raw_labels == [[0, 1]] * 4
+    assert training_lengths == [2, 3, 3, 3]
 
 
 def test_cpu_loaders_disable_pinning_and_persistent_workers() -> None:
