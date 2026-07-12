@@ -9,16 +9,24 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 .env
+.env.*
+!.env.example
 
 # Datasets (keep the directory itself)
 data/*
 !data/.gitkeep
+datasets/
+local_data/
+local_manifests/
 
 # Model checkpoints
 *.pt
 *.pth
 *.ckpt
 *.onnx
+*.safetensors
+checkpoints/
+runs/
 
 # Large experiment outputs (keep the directory itself)
 outputs/*
