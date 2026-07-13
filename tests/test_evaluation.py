@@ -15,6 +15,8 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
     apply_temperature,
     bootstrap_confidence_intervals,
     calibration_metrics,
+    compare_single_and_ensemble,
+    delong_auroc_test,
     discrimination_metrics,
     evaluate_predictions,
     failure_detection,
@@ -97,4 +99,19 @@ def test_master_evaluation_generates_portable_figures(tmp_path: Path) -> None:
     test = _predictions("test")
     evaluate_predictions(validation, test, tmp_path, "fixed_0.5", 10, 7)
     for filename in ("metrics.json", "metrics.csv", "calibration.json", "bootstrap_confidence_intervals.csv", "selective_prediction.csv", "failure_detection.json", "risk_coverage.csv", "reliability_diagram.png", "roc_curve.png", "pr_curve.png", "risk_coverage.png", "uncertainty_distribution.png"):
+        assert (tmp_path / filename).is_file()
+
+
+def test_deep_ensemble_comparison_and_paired_statistics(tmp_path: Path) -> None:
+    single = _predictions()
+    ensemble = single.assign(
+        probability=[.02, .08, .15, .3, .7, .85, .92, .98],
+        logit=np.log(np.array([.02, .08, .15, .3, .7, .85, .92, .98]) / np.array([.98, .92, .85, .7, .3, .15, .08, .02])),
+    )
+
+    result = compare_single_and_ensemble(single, ensemble, tmp_path, bootstrap_iterations=20)
+
+    assert "p_value" in delong_auroc_test(single, ensemble)
+    assert result["paired_bootstrap_auroc"]["iterations"] == 20
+    for filename in ("single_confidence_histogram.png", "ensemble_confidence_histogram.png", "single_vs_ensemble.json"):
         assert (tmp_path / filename).is_file()

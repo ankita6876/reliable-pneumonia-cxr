@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         "--resume",
         help="Existing run directory or best checkpoint to resume after configuration validation.",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Override the YAML random seed for one reproducible ensemble member.",
+    )
     return parser.parse_args()
 
 
@@ -172,6 +177,8 @@ def main() -> int:
     """Run the configurable baseline or its bounded dry-run verification."""
     args = parse_args()
     config = _load_config(args.config)
+    if args.seed is not None:
+        config["seed"] = args.seed
     model_config = config["model"]
     training_config = config["training"]
     if not isinstance(model_config, dict) or not isinstance(training_config, dict):

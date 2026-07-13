@@ -164,6 +164,52 @@ def aggregate_ensemble(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
     return result
 
 
+def delong_auroc_test(single: pd.DataFrame, ensemble: pd.DataFrame) -> dict[str, float]:
+    """Paired DeLong test for two AUROCs on identical binary-labelled samples."""
+    _validate_paired_predictions(single, ensemble)
+    y, first = _arrays(single)
+    _, second = _arrays(ensemble)
+    positives = y == 1
+    negatives = y == 0
+    first_positive, first_negative = first[positives], first[negatives]
+    second_positive, second_negative = second[positives], second[negatives]
+    first_v10, first_v01 = _delong_placements(first_positive, first_negative)
+    second_v10, second_v01 = _delong_placements(second_positive, second_negative)
+    covariance = np.cov(np.vstack((first_v10, second_v10)), ddof=1) / len(first_v10)
+    covariance += np.cov(np.vstack((first_v01, second_v01)), ddof=1) / len(first_v01)
+    variance = float(covariance[0, 0] + covariance[1, 1] - 2 * covariance[0, 1])
+    difference = float(roc_auc_score(y, second) - roc_auc_score(y, first))
+    if variance <= 0: return {"auroc_difference": difference, "z_score": float("nan"), "p_value": float("nan")}
+    z_score = difference / np.sqrt(variance)
+    from scipy.stats import norm
+    return {"auroc_difference": difference, "z_score": float(z_score), "p_value": float(2 * norm.sf(abs(z_score)))}
+
+
+def paired_bootstrap_auroc(single: pd.DataFrame, ensemble: pd.DataFrame, iterations: int = 1000, seed: int = 42) -> dict[str, float | int]:
+    """Patient-level paired bootstrap confidence interval for ensemble-minus-single AUROC."""
+    _validate_paired_predictions(single, ensemble)
+    patients = single["patient_id"].unique(); rng = np.random.default_rng(seed); differences = []
+    for _ in range(iterations):
+        selected = rng.choice(patients, len(patients), replace=True)
+        indices = np.concatenate([np.flatnonzero(single["patient_id"].to_numpy() == patient) for patient in selected])
+        y = single.iloc[indices]["binary_target"].to_numpy(int)
+        if len(np.unique(y)) == 2:
+            differences.append(float(roc_auc_score(y, ensemble.iloc[indices]["probability"]) - roc_auc_score(y, single.iloc[indices]["probability"])))
+    values = np.asarray(differences)
+    return {"difference": float(roc_auc_score(ensemble["binary_target"], ensemble["probability"]) - roc_auc_score(single["binary_target"], single["probability"])), "lower_95": float(np.quantile(values, .025)) if len(values) else float("nan"), "upper_95": float(np.quantile(values, .975)) if len(values) else float("nan"), "valid_iterations": len(values), "failed_iterations": iterations - len(values), "iterations": iterations, "seed": seed}
+
+
+def compare_single_and_ensemble(single: pd.DataFrame, ensemble: pd.DataFrame, output_dir: Path | str, threshold: float = .5, bootstrap_iterations: int = 1000, seed: int = 42) -> dict[str, Any]:
+    """Write matched single-model versus ensemble metrics and comparison figures."""
+    _validate_paired_predictions(single, ensemble)
+    output = Path(output_dir); output.mkdir(parents=True, exist_ok=True)
+    results = {"single_model": {**discrimination_metrics(single, threshold), **calibration_metrics(single), **failure_detection(single, threshold)}, "deep_ensemble": {**discrimination_metrics(ensemble, threshold), **calibration_metrics(ensemble), **failure_detection(ensemble, threshold)}, "delong": delong_auroc_test(single, ensemble), "paired_bootstrap_auroc": paired_bootstrap_auroc(single, ensemble, bootstrap_iterations, seed)}
+    (output / "single_vs_ensemble.json").write_text(json.dumps(results, indent=2, allow_nan=True))
+    for label, frame in (("single", single), ("ensemble", ensemble)):
+        _, curve = selective_prediction(frame, threshold); _plots(frame, curve, output, label); _confidence_plot(frame, output, label)
+    return results
+
+
 def bootstrap_confidence_intervals(frame: pd.DataFrame, threshold: float, iterations: int = 1000, seed: int = 42) -> pd.DataFrame:
     """Patient-level percentile bootstrap, recording failed one-class resamples explicitly."""
     frame = validate_predictions(frame); y, p = _arrays(frame); patients = frame["patient_id"].unique(); rng = np.random.default_rng(seed); rows = []
@@ -232,6 +278,28 @@ def _plots(frame: pd.DataFrame, curve: pd.DataFrame, output: Path, prefix: str) 
     plt.figure(); observed,predicted=calibration_curve(y,p,n_bins=10);plt.plot(predicted,observed,marker="o");plt.plot([0,1],[0,1],linestyle="--");plt.xlabel("Mean predicted probability");plt.ylabel("Observed frequency");plt.tight_layout();plt.savefig(output/f"{prefix}_reliability_diagram.png",dpi=300);plt.close()
     plt.figure();plt.plot(curve.coverage,curve.risk);plt.xlabel("Coverage");plt.ylabel("Risk (error rate)");plt.tight_layout();plt.savefig(output/f"{prefix}_risk_coverage.png",dpi=300);plt.close()
     uncertainty=add_deterministic_uncertainty(frame); errors=(uncertainty.probability.to_numpy()>=.5)!=uncertainty.binary_target.to_numpy();plt.figure();plt.hist(uncertainty.loc[~errors,"uncertainty"],alpha=.6,label="Correct");plt.hist(uncertainty.loc[errors,"uncertainty"],alpha=.6,label="Incorrect");plt.xlabel("Uncertainty");plt.ylabel("Sample count");plt.legend();plt.tight_layout();plt.savefig(output/f"{prefix}_uncertainty_distribution.png",dpi=300);plt.close()
+
+
+def _confidence_plot(frame: pd.DataFrame, output: Path, prefix: str) -> None:
+    """Save a 300 DPI confidence histogram without prescribing colours."""
+    probabilities = frame["probability"].to_numpy(float)
+    confidence = np.maximum(probabilities, 1 - probabilities)
+    plt.figure(); plt.hist(confidence); plt.xlabel("Prediction confidence"); plt.ylabel("Sample count"); plt.tight_layout(); plt.savefig(output / f"{prefix}_confidence_histogram.png", dpi=300); plt.close()
+
+
+def _validate_paired_predictions(single: pd.DataFrame, ensemble: pd.DataFrame) -> None:
+    """Ensure comparison samples and targets align exactly before paired statistics."""
+    validate_predictions(single); validate_predictions(ensemble)
+    if not single[list(IDENTITY_COLUMNS)].reset_index(drop=True).equals(ensemble[list(IDENTITY_COLUMNS)].reset_index(drop=True)):
+        raise ValueError("Single-model and ensemble predictions must have matching identities and ordering.")
+    if not np.array_equal(single["binary_target"].to_numpy(), ensemble["binary_target"].to_numpy()):
+        raise ValueError("Single-model and ensemble predictions must have matching targets.")
+
+
+def _delong_placements(positive: np.ndarray, negative: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    comparison = positive[:, None] - negative[None, :]
+    kernel = (comparison > 0).astype(float) + .5 * (comparison == 0)
+    return kernel.mean(axis=1), kernel.mean(axis=0)
 
 def _arrays(frame: pd.DataFrame)->tuple[np.ndarray,np.ndarray]: return frame.binary_target.to_numpy(int),frame.probability.to_numpy(float)
 def _is_absolute_path(value: object) -> bool:
