@@ -7,6 +7,11 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+import matplotlib
+
+# Evaluation artifacts must render on headless CI, Colab, and research servers.
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd

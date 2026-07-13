@@ -54,15 +54,19 @@
 
 - Version: [Specify version.]
 - Local path: [Specify local path; do not commit data to GitHub.]
-- Label definition and uncertainty handling: [Specify planned approach.]
-- Intended role: [Training, validation, external evaluation, or other.]
+- Label definition and uncertainty handling: MIMIC-CXR-JPG metadata is converted to the shared
+  portable manifest, retaining only definite Pneumonia labels `0` or `1` for external evaluation.
+- Intended role: external validation only; it is never used for threshold selection, calibration,
+  architecture selection, or model training.
 
 ### NIH ChestX-ray14
 
 - Version: [Specify version.]
 - Local path: [Specify local path; do not commit data to GitHub.]
-- Label definition and uncertainty handling: [Specify planned approach.]
-- Intended role: [Training, validation, external evaluation, or other.]
+- Label definition and uncertainty handling: `Pneumonia` in `Finding Labels` is positive and other
+  findings are negative in the prespecified weak-label external analysis.
+- Intended role: external validation only under the shared preprocessing, manifest, inference, and
+  fixed-threshold evaluation interfaces.
 
 ## 5. Inclusion and Exclusion Criteria
 
@@ -85,7 +89,9 @@ All splitting must occur at the **patient level** so that no patient contributes
 - Training split: 70% of CheXpert cohort patients, assigned deterministically with seed 42.
 - Validation split: 15% of CheXpert cohort patients, assigned deterministically with seed 42.
 - Test split: 15% of CheXpert cohort patients, assigned deterministically with seed 42.
-- External evaluation: [Specify datasets and protocol, if applicable.]
+- External evaluation: NIH ChestX-ray14 and MIMIC-CXR are converted to a shared root-relative
+  manifest format. The CheXpert validation-selected threshold and calibration parameters are frozen
+  before external inference; cross-dataset reports are descriptive and do not alter development.
 - Stratification: patient-level allocation stratified as closely as practical by original
   Pneumonia label (`1`, `0`, or `-1`); uncertain labels remain untransformed.
 
