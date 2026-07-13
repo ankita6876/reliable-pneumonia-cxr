@@ -181,11 +181,15 @@ No architecture is designated the winner before evaluation.
 
 ### Grad-CAM
 
-- [Specify target layers, image selection procedure, and review process.]
+- Grad-CAM and Grad-CAM++ will use the final convolutional feature layer of each checkpoint.
+  Predefined cases are TP, TN, FP, FN, confidence extremes, and uncertainty extremes selected from
+  existing predictions using the frozen validation threshold.
 
 ### Integrated Gradients
 
-- [Specify baseline, attribution settings, image selection procedure, and review process.]
+- Integrated Gradients (zero baseline) and occlusion sensitivity will complement Grad-CAM methods.
+  Attribution concentration, sparsity, perturbation stability, and agreement are descriptive only;
+  maps do not establish clinical reasoning or lesion localization without reference masks.
 
 ## 12. Reproducibility Checklist
 
