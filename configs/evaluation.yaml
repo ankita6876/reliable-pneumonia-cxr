@@ -1,0 +1,8 @@
+threshold_method: youden
+bootstrap_iterations: 1000
+seed: 42
+calibration:
+  method: temperature_scaling
+  fit_split: validation
+selective_prediction:
+  coverage_levels: [1.0, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50]

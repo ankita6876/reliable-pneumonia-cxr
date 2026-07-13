@@ -142,24 +142,25 @@ No architecture is designated the winner before evaluation.
 
 ### Primary Metrics
 
-- [Specify primary discrimination metric(s), such as AUROC.]
+- AUROC and AUPRC with patient-level 95% bootstrap confidence intervals.
 - [Specify primary operating-point metric(s), if applicable.]
 
 ### Secondary Metrics
 
-- [Specify precision-recall metric(s).]
+- A validation-only frozen operating threshold (Youden's J, maximum validation F1, or prespecified 0.5) will be applied unchanged to the final test set.
 - [Specify sensitivity, specificity, precision, recall, and F1-score reporting plan.]
 - [Specify subgroup and external-evaluation reporting plan.]
 
 ### Calibration Metrics
 
-- [Specify calibration measure(s), such as expected calibration error.] 
+- Negative log-likelihood, Brier score, ECE, adaptive ECE, calibration intercept/slope, and reliability diagrams will be reported. Temperature scaling is fitted only on validation logits and frozen before test evaluation.
 - [Specify calibration-curve reporting plan.]
 - [Specify probability-calibration method(s), if planned.]
 
 ### Uncertainty Metrics
 
-- [Specify uncertainty-estimation method(s).]
+- Deep ensembles are the primary uncertainty method. Predictive entropy, expected entropy, mutual information, probability variance, and logit variance will be recorded. Uncertainty-based failure detection compares correct and incorrect predictions using AUROC/AUPRC, Mann–Whitney U, and rank-biserial effect size.
+- Selective prediction will retain the least-uncertain cases at prespecified coverage levels and report risk–coverage curves. Test data remains untouched until the single final evaluation using frozen validation choices.
 - [Specify uncertainty-quality metric(s) and referral/abstention analysis plan.]
 
 ## 10. Statistical Analysis
