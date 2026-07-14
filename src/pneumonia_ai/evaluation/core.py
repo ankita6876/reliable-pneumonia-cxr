@@ -27,6 +27,7 @@ PREDICTION_COLUMNS = (
     "probability", "predicted_class", "split", "model_name", "run_id",
 )
 IDENTITY_COLUMNS = ("patient_id", "study_id", "image_path", "split")
+BOOTSTRAP_INSTANCE_COLUMN = "bootstrap_instance_id"
 COVERAGES = (1.0, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50)
 
 
@@ -38,7 +39,10 @@ def validate_predictions(frame: pd.DataFrame, *, require_logits: bool = True) ->
         raise ValueError(f"Prediction CSV is missing required column(s): {', '.join(missing)}")
     if frame.empty:
         raise ValueError("Prediction CSV contains no rows.")
-    if frame[list(IDENTITY_COLUMNS)].isna().any().any() or frame.duplicated(list(IDENTITY_COLUMNS)).any():
+    identity_columns = list(IDENTITY_COLUMNS)
+    if BOOTSTRAP_INSTANCE_COLUMN in frame:
+        identity_columns.append(BOOTSTRAP_INSTANCE_COLUMN)
+    if frame[identity_columns].isna().any().any() or frame.duplicated(identity_columns).any():
         raise ValueError("Prediction sample identities must be present and unique.")
     if frame["image_path"].map(_is_absolute_path).any():
         raise ValueError("Prediction CSV must not contain absolute image paths.")
@@ -217,19 +221,84 @@ def compare_single_and_ensemble(single: pd.DataFrame, ensemble: pd.DataFrame, ou
 
 def bootstrap_confidence_intervals(frame: pd.DataFrame, threshold: float, iterations: int = 1000, seed: int = 42) -> pd.DataFrame:
     """Patient-level percentile bootstrap, recording failed one-class resamples explicitly."""
-    frame = validate_predictions(frame); y, p = _arrays(frame); patients = frame["patient_id"].unique(); rng = np.random.default_rng(seed); rows = []
+    frame = validate_predictions(frame)
+    patients = frame["patient_id"].unique()
+    rng = np.random.default_rng(seed)
+    rows = []
     for iteration in range(iterations):
-        selected = rng.choice(patients, size=len(patients), replace=True); indices = np.concatenate([np.flatnonzero(frame["patient_id"].to_numpy() == patient) for patient in selected])
+        selected = rng.choice(patients, size=len(patients), replace=True)
+        sampled = _bootstrap_sample(frame, selected)
+        sampled_targets = sampled["binary_target"].to_numpy(int)
+        if len(np.unique(sampled_targets)) != 2:
+            rows.append(
+                {
+                    "iteration": iteration,
+                    "status": "failed",
+                    "reason": "sampled bootstrap frame contains only one target class",
+                }
+            )
+            continue
         try:
-            metrics = discrimination_metrics(frame.iloc[indices], threshold); metrics.update(calibration_metrics(frame.iloc[indices])); rows.append({"iteration": iteration, "status": "valid", **{key: metrics[key] for key in ("auroc", "auprc", "sensitivity", "specificity", "brier_score", "expected_calibration_error")}})
-        except ValueError as error: rows.append({"iteration": iteration, "status": "failed", "reason": str(error)})
+            metrics = discrimination_metrics(sampled, threshold)
+            metrics.update(calibration_metrics(sampled))
+            rows.append(
+                {
+                    "iteration": iteration,
+                    "status": "valid",
+                    **{
+                        key: metrics[key]
+                        for key in (
+                            "auroc",
+                            "auprc",
+                            "sensitivity",
+                            "specificity",
+                            "brier_score",
+                            "expected_calibration_error",
+                        )
+                    },
+                }
+            )
+        except ValueError as error:
+            rows.append(
+                {
+                    "iteration": iteration,
+                    "status": "failed",
+                    "reason": str(error),
+                }
+            )
     values = pd.DataFrame(rows)
     valid = values.loc[values["status"] == "valid"]
+    failures = values.loc[values["status"] == "failed"]
+    failure_reasons = "\n".join(
+        f"iteration {row.iteration}: {row.reason}"
+        for row in failures.itertuples(index=False)
+    )
     summary = []
     for metric in ("auroc", "auprc", "sensitivity", "specificity", "brier_score", "expected_calibration_error"):
         series = valid[metric].dropna() if metric in valid else pd.Series(dtype=float)
-        summary.append({"metric": metric, "lower_95": series.quantile(.025) if len(series) else np.nan, "upper_95": series.quantile(.975) if len(series) else np.nan, "valid_iterations": len(valid), "failed_iterations": len(values) - len(valid), "iterations": iterations, "seed": seed})
+        summary.append(
+            {
+                "metric": metric,
+                "lower_95": series.quantile(.025) if len(series) else np.nan,
+                "upper_95": series.quantile(.975) if len(series) else np.nan,
+                "valid_iterations": len(valid),
+                "failed_iterations": len(values) - len(valid),
+                "iterations": iterations,
+                "seed": seed,
+                "failure_reasons": failure_reasons,
+            }
+        )
     return pd.DataFrame(summary)
+
+
+def _bootstrap_sample(frame: pd.DataFrame, selected_patients: np.ndarray) -> pd.DataFrame:
+    """Repeat each selected patient's rows with a unique bootstrap-instance ID."""
+    samples = []
+    for instance, patient_id in enumerate(selected_patients):
+        patient_rows = frame.loc[frame["patient_id"] == patient_id].copy()
+        patient_rows[BOOTSTRAP_INSTANCE_COLUMN] = instance
+        samples.append(patient_rows)
+    return pd.concat(samples, ignore_index=True)
 
 
 def failure_detection(frame: pd.DataFrame, threshold: float, uncertainty_column: str = "uncertainty") -> dict[str, Any]:
