@@ -27,6 +27,7 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
     selective_prediction,
     selective_prediction_all,
     select_threshold,
+    metrics_at_threshold,
     validate_predictions,
 )
 
@@ -34,6 +35,28 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
 def _predictions(split: str = "validation") -> pd.DataFrame:
     probabilities = np.array([.05, .15, .25, .4, .6, .75, .85, .95])
     return pd.DataFrame({"patient_id":[f"p{i//2}" for i in range(8)], "study_id":[f"s{i}" for i in range(8)], "image_path":[f"images/{i}.png" for i in range(8)], "original_label":[0,0,0,0,1,1,1,1], "binary_target":[0,0,0,0,1,1,1,1], "logit":np.log(probabilities/(1-probabilities)), "probability":probabilities, "predicted_class":(probabilities>=.5).astype(int), "split":split, "model_name":"toy", "run_id":"run"})
+
+
+def _patient_balanced_predictions(
+    split: str,
+    probabilities: np.ndarray,
+) -> pd.DataFrame:
+    targets = np.tile([0, 1], 4)
+    return pd.DataFrame(
+        {
+            "patient_id": [f"p{i // 2}" for i in range(8)],
+            "study_id": [f"s{i}" for i in range(8)],
+            "image_path": [f"images/{i}.png" for i in range(8)],
+            "original_label": targets,
+            "binary_target": targets,
+            "logit": np.log(probabilities / (1 - probabilities)),
+            "probability": probabilities,
+            "predicted_class": (probabilities >= .5).astype(int),
+            "split": split,
+            "model_name": "toy",
+            "run_id": "run",
+        }
+    )
 
 
 def test_schema_metrics_threshold_and_calibration() -> None:
@@ -152,6 +175,62 @@ def test_master_evaluation_generates_portable_figures(tmp_path: Path) -> None:
         "validation_uncertainty_risk_coverage.png",
     ):
         assert (tmp_path / filename).is_file()
+
+
+def test_evaluation_writes_split_specific_patient_bootstrap_intervals(
+    tmp_path: Path,
+) -> None:
+    validation = _patient_balanced_predictions(
+        "validation",
+        np.array([.05, .95, .1, .9, .2, .8, .25, .75]),
+    )
+    test = _patient_balanced_predictions(
+        "test",
+        np.array([.35, .65, .4, .6, .45, .55, .3, .7]),
+    )
+
+    metrics = evaluate_predictions(
+        validation,
+        test,
+        tmp_path,
+        "fixed_0.5",
+        20,
+        11,
+    )
+
+    validation_bootstrap = pd.read_csv(
+        tmp_path / "validation_bootstrap_confidence_intervals.csv"
+    )
+    test_bootstrap = pd.read_csv(tmp_path / "test_bootstrap_confidence_intervals.csv")
+    legacy_bootstrap = pd.read_csv(tmp_path / "bootstrap_confidence_intervals.csv")
+    temperature = fit_temperature(validation)["temperature"]
+    calibrated_test = apply_temperature(test, temperature)
+    expected_test_brier = calibration_metrics(calibrated_test)["brier_score"]
+    expected_test_sensitivity = metrics_at_threshold(
+        calibrated_test["binary_target"].to_numpy(int),
+        calibrated_test["probability"].to_numpy(float),
+        .5,
+    )["sensitivity"]
+
+    assert validation_bootstrap["metric"].tolist() == [
+        "auroc",
+        "auprc",
+        "sensitivity",
+        "specificity",
+        "brier_score",
+        "expected_calibration_error",
+    ]
+    assert test_bootstrap["metric"].tolist() == validation_bootstrap["metric"].tolist()
+    assert {"point_estimate", "lower_95", "upper_95", "valid_iterations", "failed_iterations", "iterations", "seed", "failure_reasons"} <= set(test_bootstrap.columns)
+    assert (validation_bootstrap["valid_iterations"] == 20).all()
+    assert (test_bootstrap["valid_iterations"] == 20).all()
+    assert (validation_bootstrap["failed_iterations"] == 0).all()
+    assert (test_bootstrap["failed_iterations"] == 0).all()
+    pd.testing.assert_frame_equal(validation_bootstrap, legacy_bootstrap)
+    assert test_bootstrap.loc[test_bootstrap["metric"] == "brier_score", "point_estimate"].item() == pytest.approx(expected_test_brier)
+    assert test_bootstrap.loc[test_bootstrap["metric"] == "sensitivity", "point_estimate"].item() == pytest.approx(expected_test_sensitivity)
+    assert metrics["validation"]["temperature"] == pytest.approx(temperature)
+    assert metrics["test"]["temperature"] == pytest.approx(temperature)
 
 
 def test_deep_ensemble_comparison_and_paired_statistics(tmp_path: Path) -> None:

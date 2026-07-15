@@ -274,6 +274,7 @@ def compare_single_and_ensemble(single: pd.DataFrame, ensemble: pd.DataFrame, ou
 def bootstrap_confidence_intervals(frame: pd.DataFrame, threshold: float, iterations: int = 1000, seed: int = 42) -> pd.DataFrame:
     """Patient-level percentile bootstrap, recording failed one-class resamples explicitly."""
     frame = validate_predictions(frame)
+    point_estimates = _bootstrap_metrics(frame, threshold)
     patients = frame["patient_id"].unique()
     rng = np.random.default_rng(seed)
     rows = []
@@ -317,7 +318,7 @@ def bootstrap_confidence_intervals(frame: pd.DataFrame, threshold: float, iterat
                     "status": "failed",
                     "reason": str(error),
                 }
-            )
+        )
     values = pd.DataFrame(rows)
     valid = values.loc[values["status"] == "valid"]
     failures = values.loc[values["status"] == "failed"]
@@ -331,6 +332,7 @@ def bootstrap_confidence_intervals(frame: pd.DataFrame, threshold: float, iterat
         summary.append(
             {
                 "metric": metric,
+                "point_estimate": point_estimates[metric],
                 "lower_95": series.quantile(.025) if len(series) else np.nan,
                 "upper_95": series.quantile(.975) if len(series) else np.nan,
                 "valid_iterations": len(valid),
@@ -341,6 +343,29 @@ def bootstrap_confidence_intervals(frame: pd.DataFrame, threshold: float, iterat
             }
         )
     return pd.DataFrame(summary)
+
+
+def _bootstrap_metrics(frame: pd.DataFrame, threshold: float) -> dict[str, float]:
+    """Calculate bootstrap-report point estimates without fitting any parameters."""
+    targets = frame["binary_target"].to_numpy(int)
+    probabilities = frame["probability"].to_numpy(float)
+    operating_metrics = metrics_at_threshold(targets, probabilities, threshold)
+    calibration = calibration_metrics(frame)
+    if len(np.unique(targets)) == 2:
+        discrimination = discrimination_metrics(frame, threshold)
+        auroc = float(discrimination["auroc"])
+        auprc = float(discrimination["auprc"])
+    else:
+        auroc = float("nan")
+        auprc = float("nan")
+    return {
+        "auroc": auroc,
+        "auprc": auprc,
+        "sensitivity": float(operating_metrics["sensitivity"]),
+        "specificity": float(operating_metrics["specificity"]),
+        "brier_score": float(calibration["brier_score"]),
+        "expected_calibration_error": float(calibration["expected_calibration_error"]),
+    }
 
 
 def _bootstrap_sample(frame: pd.DataFrame, selected_patients: np.ndarray) -> pd.DataFrame:
@@ -508,8 +533,36 @@ def evaluate_predictions(validation: pd.DataFrame, test: pd.DataFrame | None, ou
             all_curves.to_csv(output / "uncertainty_risk_coverage.csv", index=False)
             for suffix in ("reliability_diagram.png", "roc_curve.png", "pr_curve.png", "risk_coverage.png", "uncertainty_distribution.png"):
                 (output / f"validation_{suffix}").replace(output / suffix)
-    (output/"metrics.json").write_text(json.dumps(all_metrics,indent=2,allow_nan=False)); pd.DataFrame(all_metrics.values()).to_csv(output/"metrics.csv",index=False); (output/"calibration.json").write_text(json.dumps({"temperature_fit":temperature,"metrics":{k:calibration_metrics(v) for k,v in datasets.items()}},indent=2,allow_nan=False)); bootstrap_summary = bootstrap_confidence_intervals(datasets["validation"],threshold,bootstrap_iterations,seed)
-    bootstrap_summary.to_csv(output / "bootstrap_confidence_intervals.csv", index=False)
+    (output / "metrics.json").write_text(
+        json.dumps(all_metrics, indent=2, allow_nan=False)
+    )
+    pd.DataFrame(all_metrics.values()).to_csv(output / "metrics.csv", index=False)
+    (output / "calibration.json").write_text(
+        json.dumps(
+            {
+                "temperature_fit": temperature,
+                "metrics": {name: calibration_metrics(frame) for name, frame in datasets.items()},
+            },
+            indent=2,
+            allow_nan=False,
+        )
+    )
+    for name, frame in datasets.items():
+        bootstrap_summary = bootstrap_confidence_intervals(
+            frame,
+            threshold,
+            bootstrap_iterations,
+            seed,
+        )
+        bootstrap_summary.to_csv(
+            output / f"{name}_bootstrap_confidence_intervals.csv",
+            index=False,
+        )
+        if name == "validation":
+            bootstrap_summary.to_csv(
+                output / "bootstrap_confidence_intervals.csv",
+                index=False,
+            )
     return all_metrics
 
 
