@@ -1,12 +1,19 @@
 """Create privacy-safe error-analysis tables from an existing prediction CSV."""
 import argparse
+import json
 from pathlib import Path
 import sys
 
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from pneumonia_ai.evaluation.core import add_deterministic_uncertainty, failure_detection, validate_predictions  # noqa: E402
+from pneumonia_ai.evaluation.core import (  # noqa: E402
+    add_deterministic_uncertainty,
+    failure_detection,
+    failure_detection_all,
+    failure_detection_table,
+    validate_predictions,
+)
 
 
 def main() -> None:
@@ -42,6 +49,13 @@ def main() -> None:
     frame.groupby("outcome").agg(count=("outcome", "size"), mean_probability=("probability", "mean"), median_probability=("probability", "median"), mean_uncertainty=("uncertainty", "mean"), median_uncertainty=("uncertainty", "median")).reset_index().to_csv(output / "outcome_summary.csv", index=False)
     frame.groupby("outcome")["uncertainty"].agg(["mean", "median", "count"]).reset_index().to_csv(output / "uncertainty_by_outcome.csv", index=False)
     pd.DataFrame([failure_detection(frame, args.threshold)]).to_json(output / "error_metrics.json", orient="records", indent=2)
+    analyses = failure_detection_all(frame, args.threshold)
+    (output / "uncertainty_failure_detection.json").write_text(
+        json.dumps(analyses, indent=2, allow_nan=False)
+    )
+    failure_detection_table(analyses).to_csv(
+        output / "uncertainty_failure_detection.csv", index=False
+    )
 
 
 if __name__ == "__main__":

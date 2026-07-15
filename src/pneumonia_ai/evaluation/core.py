@@ -29,6 +29,16 @@ PREDICTION_COLUMNS = (
 IDENTITY_COLUMNS = ("patient_id", "study_id", "image_path", "split")
 BOOTSTRAP_INSTANCE_COLUMN = "bootstrap_instance_id"
 COVERAGES = (1.0, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50)
+ENTROPY_EPSILON = 1e-12
+UNCERTAINTY_MEASURES = (
+    "predictive_entropy",
+    "mean_member_entropy",
+    "mutual_information",
+    "member_probability_variance",
+    "member_probability_standard_deviation",
+    "binary_member_disagreement_rate",
+    "confidence_uncertainty",
+)
 
 
 def validate_predictions(frame: pd.DataFrame, *, require_logits: bool = True) -> pd.DataFrame:
@@ -154,9 +164,13 @@ def apply_temperature(frame: pd.DataFrame, temperature: float) -> pd.DataFrame:
 
 
 def add_deterministic_uncertainty(frame: pd.DataFrame) -> pd.DataFrame:
-    result = validate_predictions(frame); p = result["probability"].to_numpy(float)
-    result["confidence"] = np.maximum(p, 1 - p); result["uncertainty"] = 1 - result["confidence"]
-    result["predictive_entropy"] = _entropy(p); return result
+    result = validate_predictions(frame)
+    probabilities = result["probability"].to_numpy(float)
+    result["confidence"] = np.maximum(probabilities, 1 - probabilities)
+    result["uncertainty"] = 1 - result["confidence"]
+    result["confidence_uncertainty"] = result["uncertainty"]
+    result["predictive_entropy"] = _entropy(probabilities)
+    return result
 
 
 def aggregate_ensemble(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
@@ -167,9 +181,31 @@ def aggregate_ensemble(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
     for member in members[1:]:
         if not identity.equals(member[list(IDENTITY_COLUMNS)]): raise ValueError("Ensemble inputs have mismatched sample identities or ordering.")
         if not np.array_equal(members[0]["binary_target"], member["binary_target"]): raise ValueError("Ensemble inputs have mismatched binary targets.")
-    probabilities = np.stack([item["probability"].to_numpy(float) for item in members]); logits = np.stack([item["logit"].to_numpy(float) for item in members])
-    result = members[0].copy(); result["logit"] = logits.mean(axis=0); result["probability"] = probabilities.mean(axis=0); result["predicted_class"] = (result["probability"] >= .5).astype(int)
-    result["ensemble_mean_probability"] = result["probability"]; result["predictive_entropy"] = _entropy(result["probability"].to_numpy(float)); result["expected_entropy"] = _entropy(probabilities).mean(axis=0); result["mutual_information"] = result["predictive_entropy"] - result["expected_entropy"]; result["probability_variance"] = probabilities.var(axis=0); result["logit_variance"] = logits.var(axis=0)
+    probabilities = np.stack([item["probability"].to_numpy(float) for item in members])
+    logits = np.stack([item["logit"].to_numpy(float) for item in members])
+    result = members[0].copy()
+    for member_index, member_probabilities in enumerate(probabilities):
+        result[f"member_probability_{member_index}"] = member_probabilities
+    result["logit"] = logits.mean(axis=0)
+    result["probability"] = probabilities.mean(axis=0)
+    result["predicted_class"] = (result["probability"] >= 0.5).astype(int)
+    result["ensemble_mean_probability"] = result["probability"]
+    result["predictive_entropy"] = _entropy(result["probability"].to_numpy(float))
+    result["mean_member_entropy"] = _entropy(probabilities).mean(axis=0)
+    result["expected_entropy"] = result["mean_member_entropy"]
+    result["mutual_information"] = np.maximum(
+        result["predictive_entropy"] - result["mean_member_entropy"], 0.0
+    )
+    result["member_probability_variance"] = probabilities.var(axis=0)
+    result["member_probability_standard_deviation"] = probabilities.std(axis=0)
+    result["probability_variance"] = result["member_probability_variance"]
+    member_predictions = probabilities >= 0.5
+    result["binary_member_disagreement_rate"] = np.minimum(
+        member_predictions.mean(axis=0),
+        1 - member_predictions.mean(axis=0),
+    )
+    result["logit_variance"] = logits.var(axis=0)
+    result = add_deterministic_uncertainty(result)
     return result
 
 
@@ -212,7 +248,23 @@ def compare_single_and_ensemble(single: pd.DataFrame, ensemble: pd.DataFrame, ou
     """Write matched single-model versus ensemble metrics and comparison figures."""
     _validate_paired_predictions(single, ensemble)
     output = Path(output_dir); output.mkdir(parents=True, exist_ok=True)
-    results = {"single_model": {**discrimination_metrics(single, threshold), **calibration_metrics(single), **failure_detection(single, threshold)}, "deep_ensemble": {**discrimination_metrics(ensemble, threshold), **calibration_metrics(ensemble), **failure_detection(ensemble, threshold)}, "delong": delong_auroc_test(single, ensemble), "paired_bootstrap_auroc": paired_bootstrap_auroc(single, ensemble, bootstrap_iterations, seed)}
+    results = {
+        "single_model": {
+            **discrimination_metrics(single, threshold),
+            **calibration_metrics(single),
+            **failure_detection(single, threshold),
+        },
+        "deep_ensemble": {
+            **discrimination_metrics(ensemble, threshold),
+            **calibration_metrics(ensemble),
+            **failure_detection(ensemble, threshold),
+            "uncertainty_failure_detection": failure_detection_all(ensemble, threshold),
+        },
+        "delong": delong_auroc_test(single, ensemble),
+        "paired_bootstrap_auroc": paired_bootstrap_auroc(
+            single, ensemble, bootstrap_iterations, seed
+        ),
+    }
     (output / "single_vs_ensemble.json").write_text(json.dumps(results, indent=2, allow_nan=True))
     for label, frame in (("single", single), ("ensemble", ensemble)):
         _, curve = selective_prediction(frame, threshold); _plots(frame, curve, output, label); _confidence_plot(frame, output, label)
@@ -302,27 +354,126 @@ def _bootstrap_sample(frame: pd.DataFrame, selected_patients: np.ndarray) -> pd.
 
 
 def failure_detection(frame: pd.DataFrame, threshold: float, uncertainty_column: str = "uncertainty") -> dict[str, Any]:
-    frame = add_deterministic_uncertainty(frame) if uncertainty_column not in frame else frame.copy(); validate_predictions(frame)
-    y, p = _arrays(frame); error = ((p >= threshold).astype(int) != y).astype(int); u = frame[uncertainty_column].to_numpy(float)
-    result: dict[str, Any] = {"error_count": int(error.sum()), "correct_count": int((1-error).sum())}
-    if len(np.unique(error)) == 2: result.update(error_detection_auroc=float(roc_auc_score(error,u)), error_detection_auprc=float(average_precision_score(error,u)))
-    else: result.update(error_detection_auroc=None, error_detection_auprc=None)
-    result["uncertainty_correct"] = _distribution(u[error == 0]); result["uncertainty_incorrect"] = _distribution(u[error == 1])
-    groups = {"tp": (y==1)&(error==0), "tn": (y==0)&(error==0), "fp": (y==0)&(error==1), "fn": (y==1)&(error==1)}; result["by_outcome"] = {key:_distribution(u[mask]) for key,mask in groups.items()}
-    if error.sum() and (1-error).sum():
+    frame = _ensure_uncertainty_columns(frame)
+    validate_predictions(frame)
+    y, probabilities = _arrays(frame)
+    error = ((probabilities >= threshold).astype(int) != y).astype(int)
+    uncertainty = frame[uncertainty_column].to_numpy(float)
+    result: dict[str, Any] = {
+        "uncertainty_measure": uncertainty_column,
+        "error_count": int(error.sum()),
+        "correct_count": int((1 - error).sum()),
+    }
+    if len(np.unique(error)) == 2:
+        result["error_detection_auroc"] = float(roc_auc_score(error, uncertainty))
+        result["error_detection_auprc"] = float(average_precision_score(error, uncertainty))
+    else:
+        result["error_detection_auroc"] = None
+        result["error_detection_auprc"] = None
+    result["uncertainty_correct"] = _distribution(uncertainty[error == 0])
+    result["uncertainty_incorrect"] = _distribution(uncertainty[error == 1])
+    groups = {
+        "tp": (y == 1) & (error == 0),
+        "tn": (y == 0) & (error == 0),
+        "fp": (y == 0) & (error == 1),
+        "fn": (y == 1) & (error == 1),
+    }
+    result["by_outcome"] = {
+        name: _distribution(uncertainty[mask]) for name, mask in groups.items()
+    }
+    if error.sum() and (1 - error).sum():
         from scipy.stats import mannwhitneyu
-        statistic, pvalue = mannwhitneyu(u[error==1], u[error==0], alternative="two-sided"); result["mann_whitney_u"] = float(statistic); result["mann_whitney_pvalue"] = float(pvalue); result["rank_biserial_effect_size"] = float(2*statistic/(error.sum()*(1-error).sum())-1)
+
+        statistic, pvalue = mannwhitneyu(
+            uncertainty[error == 1], uncertainty[error == 0], alternative="two-sided"
+        )
+        result["mann_whitney_u"] = float(statistic)
+        result["mann_whitney_pvalue"] = float(pvalue)
+        result["rank_biserial_effect_size"] = float(
+            2 * statistic / (error.sum() * (1 - error).sum()) - 1
+        )
     return result
 
 
-def selective_prediction(frame: pd.DataFrame, threshold: float, coverages: tuple[float,...] = COVERAGES, cutoffs: dict[float,float] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    frame = add_deterministic_uncertainty(frame) if "uncertainty" not in frame else frame.copy(); validate_predictions(frame); y,p=_arrays(frame); rows=[]; curve=[]
+def failure_detection_all(frame: pd.DataFrame, threshold: float) -> dict[str, dict[str, Any]]:
+    """Evaluate every available uncertainty measure for detecting prediction errors."""
+    frame = _ensure_uncertainty_columns(frame)
+    measures = _available_uncertainty_measures(frame)
+    return {measure: failure_detection(frame, threshold, measure) for measure in measures}
+
+
+def failure_detection_table(analyses: dict[str, dict[str, Any]]) -> pd.DataFrame:
+    """Flatten uncertainty failure-detection results for a publication-ready CSV."""
+    rows = []
+    for measure, result in analyses.items():
+        correct = result["uncertainty_correct"]
+        incorrect = result["uncertainty_incorrect"]
+        rows.append({
+            "uncertainty_measure": measure,
+            "error_detection_auroc": result["error_detection_auroc"],
+            "error_detection_auprc": result["error_detection_auprc"],
+            "correct_uncertainty_mean": correct["mean"],
+            "correct_uncertainty_median": correct["median"],
+            "incorrect_uncertainty_mean": incorrect["mean"],
+            "incorrect_uncertainty_median": incorrect["median"],
+            "mann_whitney_u": result.get("mann_whitney_u"),
+            "mann_whitney_pvalue": result.get("mann_whitney_pvalue"),
+            "rank_biserial_effect_size": result.get("rank_biserial_effect_size"),
+            "correct_count": result["correct_count"],
+            "error_count": result["error_count"],
+        })
+    return pd.DataFrame(rows)
+
+
+def selective_prediction(frame: pd.DataFrame, threshold: float, coverages: tuple[float, ...] = COVERAGES, cutoffs: dict[float, float] | None = None, uncertainty_column: str = "uncertainty") -> tuple[pd.DataFrame, pd.DataFrame]:
+    frame = _ensure_uncertainty_columns(frame)
+    validate_predictions(frame)
+    uncertainty = frame[uncertainty_column]
+    rows = []
+    curve = []
     for coverage in coverages:
-        cutoff = cutoffs[coverage] if cutoffs else float(np.quantile(frame.uncertainty, coverage, method="higher")); retained=frame.loc[frame.uncertainty<=cutoff]; metrics=discrimination_metrics(retained,threshold) if len(np.unique(retained.binary_target))==2 else metrics_at_threshold(retained.binary_target.to_numpy(int),retained.probability.to_numpy(float),threshold)
-        metrics.update(coverage=coverage, uncertainty_cutoff=cutoff, retained_sample_count=len(retained), deferred_sample_count=len(frame)-len(retained), risk=1-metrics["accuracy"]); rows.append(metrics)
-    ordered=frame.sort_values("uncertainty").reset_index(drop=True)
-    for count in range(1,len(ordered)+1): curve.append({"coverage":count/len(ordered),"risk":float(np.mean((ordered.probability.iloc[:count].to_numpy()>=threshold)!=ordered.binary_target.iloc[:count].to_numpy()))})
+        cutoff = cutoffs[coverage] if cutoffs else float(
+            np.quantile(uncertainty, coverage, method="higher")
+        )
+        retained = frame.loc[uncertainty <= cutoff]
+        if len(np.unique(retained.binary_target)) == 2:
+            metrics = discrimination_metrics(retained, threshold)
+        else:
+            metrics = metrics_at_threshold(
+                retained.binary_target.to_numpy(int),
+                retained.probability.to_numpy(float),
+                threshold,
+            )
+        metrics.update({
+            "uncertainty_measure": uncertainty_column,
+            "coverage": coverage,
+            "uncertainty_cutoff": cutoff,
+            "retained_sample_count": len(retained),
+            "deferred_sample_count": len(frame) - len(retained),
+            "risk": 1 - metrics["accuracy"],
+        })
+        rows.append(metrics)
+    ordered = frame.assign(_uncertainty=uncertainty).sort_values("_uncertainty").reset_index(drop=True)
+    for count in range(1, len(ordered) + 1):
+        errors = (ordered.probability.iloc[:count].to_numpy() >= threshold) != ordered.binary_target.iloc[:count].to_numpy()
+        curve.append({
+            "uncertainty_measure": uncertainty_column,
+            "coverage": count / len(ordered),
+            "risk": float(np.mean(errors)),
+        })
     return pd.DataFrame(rows),pd.DataFrame(curve)
+
+
+def selective_prediction_all(frame: pd.DataFrame, threshold: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Produce selective-prediction tables and curves for every uncertainty measure."""
+    frame = _ensure_uncertainty_columns(frame)
+    tables = []
+    curves = []
+    for measure in _available_uncertainty_measures(frame):
+        table, curve = selective_prediction(frame, threshold, uncertainty_column=measure)
+        tables.append(table)
+        curves.append(curve)
+    return pd.concat(tables, ignore_index=True), pd.concat(curves, ignore_index=True)
 
 
 def evaluate_predictions(validation: pd.DataFrame, test: pd.DataFrame | None, output_dir: Path | str, threshold_method: str, bootstrap_iterations: int, seed: int) -> dict[str, Any]:
@@ -336,9 +487,25 @@ def evaluate_predictions(validation: pd.DataFrame, test: pd.DataFrame | None, ou
     for name,frame in datasets.items():
         metrics={**discrimination_metrics(frame,threshold),**calibration_metrics(frame),"threshold_method":threshold_method,"temperature":temperature["temperature"],"split":name}; all_metrics[name]=metrics
         selective, curve=selective_prediction(frame,threshold,cutoffs={coverage:float(np.quantile(datasets["validation"].uncertainty if "uncertainty" in datasets["validation"] else add_deterministic_uncertainty(datasets["validation"]).uncertainty,coverage,method="higher")) for coverage in COVERAGES}); selective.to_csv(output/f"{name}_selective_prediction.csv",index=False); curve.to_csv(output/f"{name}_risk_coverage.csv",index=False); (output/f"{name}_failure_detection.json").write_text(json.dumps(failure_detection(frame,threshold),indent=2,allow_nan=False)); _plots(frame,curve,output,name)
+        all_failure_detection = failure_detection_all(frame, threshold)
+        failure_table = failure_detection_table(all_failure_detection)
+        all_selective, all_curves = selective_prediction_all(frame, threshold)
+        failure_table.to_csv(output / f"{name}_uncertainty_failure_detection.csv", index=False)
+        (output / f"{name}_uncertainty_failure_detection.json").write_text(
+            json.dumps(all_failure_detection, indent=2, allow_nan=False)
+        )
+        all_selective.to_csv(output / f"{name}_uncertainty_selective_prediction.csv", index=False)
+        all_curves.to_csv(output / f"{name}_uncertainty_risk_coverage.csv", index=False)
+        _uncertainty_plots(frame, threshold, failure_table, all_curves, output, name)
         if name == "validation":
             selective.to_csv(output / "selective_prediction.csv", index=False); curve.to_csv(output / "risk_coverage.csv", index=False)
             (output / "failure_detection.json").write_text(json.dumps(failure_detection(frame, threshold), indent=2, allow_nan=False))
+            failure_table.to_csv(output / "uncertainty_failure_detection.csv", index=False)
+            (output / "uncertainty_failure_detection.json").write_text(
+                json.dumps(all_failure_detection, indent=2, allow_nan=False)
+            )
+            all_selective.to_csv(output / "uncertainty_selective_prediction.csv", index=False)
+            all_curves.to_csv(output / "uncertainty_risk_coverage.csv", index=False)
             for suffix in ("reliability_diagram.png", "roc_curve.png", "pr_curve.png", "risk_coverage.png", "uncertainty_distribution.png"):
                 (output / f"validation_{suffix}").replace(output / suffix)
     (output/"metrics.json").write_text(json.dumps(all_metrics,indent=2,allow_nan=False)); pd.DataFrame(all_metrics.values()).to_csv(output/"metrics.csv",index=False); (output/"calibration.json").write_text(json.dumps({"temperature_fit":temperature,"metrics":{k:calibration_metrics(v) for k,v in datasets.items()}},indent=2,allow_nan=False)); bootstrap_summary = bootstrap_confidence_intervals(datasets["validation"],threshold,bootstrap_iterations,seed)
@@ -352,6 +519,105 @@ def _plots(frame: pd.DataFrame, curve: pd.DataFrame, output: Path, prefix: str) 
     plt.figure(); observed,predicted=calibration_curve(y,p,n_bins=10);plt.plot(predicted,observed,marker="o");plt.plot([0,1],[0,1],linestyle="--");plt.xlabel("Mean predicted probability");plt.ylabel("Observed frequency");plt.tight_layout();plt.savefig(output/f"{prefix}_reliability_diagram.png",dpi=300);plt.close()
     plt.figure();plt.plot(curve.coverage,curve.risk);plt.xlabel("Coverage");plt.ylabel("Risk (error rate)");plt.tight_layout();plt.savefig(output/f"{prefix}_risk_coverage.png",dpi=300);plt.close()
     uncertainty=add_deterministic_uncertainty(frame); errors=(uncertainty.probability.to_numpy()>=.5)!=uncertainty.binary_target.to_numpy();plt.figure();plt.hist(uncertainty.loc[~errors,"uncertainty"],alpha=.6,label="Correct");plt.hist(uncertainty.loc[errors,"uncertainty"],alpha=.6,label="Incorrect");plt.xlabel("Uncertainty");plt.ylabel("Sample count");plt.legend();plt.tight_layout();plt.savefig(output/f"{prefix}_uncertainty_distribution.png",dpi=300);plt.close()
+
+
+def _uncertainty_plots(frame: pd.DataFrame, threshold: float, table: pd.DataFrame, curves: pd.DataFrame, output: Path, prefix: str) -> None:
+    """Save comparison figures for all uncertainty measures at publication resolution."""
+    _plot_uncertainty_metric_comparison(
+        table,
+        "error_detection_auroc",
+        "Error-detection AUROC",
+        output / f"{prefix}_uncertainty_auroc_comparison.png",
+    )
+    _plot_uncertainty_metric_comparison(
+        table,
+        "error_detection_auprc",
+        "Error-detection AUPRC",
+        output / f"{prefix}_uncertainty_auprc_comparison.png",
+    )
+    frame = _ensure_uncertainty_columns(frame)
+    errors = (frame["probability"].to_numpy(float) >= threshold) != frame["binary_target"].to_numpy(int)
+    measures = _available_uncertainty_measures(frame)
+    figure, axes = plt.subplots(len(measures), 1, figsize=(7, 2.2 * len(measures)), squeeze=False)
+    for axis, measure in zip(axes[:, 0], measures):
+        axis.hist(frame.loc[~errors, measure], alpha=0.6, label="Correct")
+        axis.hist(frame.loc[errors, measure], alpha=0.6, label="Incorrect")
+        axis.set_title(measure)
+        axis.set_xlabel("Uncertainty")
+        axis.set_ylabel("Sample count")
+        axis.legend()
+    figure.tight_layout()
+    figure.savefig(output / f"{prefix}_uncertainty_distributions.png", dpi=300)
+    plt.close(figure)
+    _plot_uncertainty_risk_coverage(
+        curves,
+        output / f"{prefix}_uncertainty_risk_coverage.png",
+    )
+
+
+def _plot_uncertainty_metric_comparison(
+    table: pd.DataFrame,
+    metric_column: str,
+    axis_label: str,
+    output_path: Path,
+) -> None:
+    """Plot finite uncertainty-comparison values or an explanatory empty figure."""
+    figure, axis = plt.subplots(figsize=(8, 4.5))
+    values = pd.to_numeric(table.get(metric_column), errors="coerce")
+    if values is None:
+        valid = pd.DataFrame(columns=["uncertainty_measure", metric_column])
+    else:
+        valid = table.loc[np.isfinite(values)].copy()
+        valid[metric_column] = values.loc[valid.index]
+        valid = valid.sort_values(metric_column)
+    if valid.empty:
+        axis.text(
+            0.5,
+            0.5,
+            "No valid uncertainty metrics",
+            ha="center",
+            va="center",
+            transform=axis.transAxes,
+        )
+    else:
+        axis.barh(valid["uncertainty_measure"], valid[metric_column])
+    axis.set_xlabel(axis_label)
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=300)
+    plt.close(figure)
+
+
+def _plot_uncertainty_risk_coverage(curves: pd.DataFrame, output_path: Path) -> None:
+    """Plot finite risk-coverage curves or an explanatory empty figure."""
+    figure, axis = plt.subplots(figsize=(7, 4.5))
+    required_columns = {"uncertainty_measure", "coverage", "risk"}
+    if required_columns.issubset(curves.columns):
+        valid = curves.copy()
+        valid["coverage"] = pd.to_numeric(valid["coverage"], errors="coerce")
+        valid["risk"] = pd.to_numeric(valid["risk"], errors="coerce")
+        valid = valid.loc[
+            np.isfinite(valid["coverage"]) & np.isfinite(valid["risk"])
+        ]
+    else:
+        valid = pd.DataFrame(columns=["uncertainty_measure", "coverage", "risk"])
+    if valid.empty:
+        axis.text(
+            0.5,
+            0.5,
+            "No valid uncertainty metrics",
+            ha="center",
+            va="center",
+            transform=axis.transAxes,
+        )
+    else:
+        for measure, curve in valid.groupby("uncertainty_measure"):
+            axis.plot(curve["coverage"], curve["risk"], label=measure)
+        axis.legend(fontsize="small")
+    axis.set_xlabel("Coverage")
+    axis.set_ylabel("Risk (error rate)")
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=300)
+    plt.close(figure)
 
 
 def _confidence_plot(frame: pd.DataFrame, output: Path, prefix: str) -> None:
@@ -386,7 +652,33 @@ def _safe_divide(numerator: float | int, denominator: float | int) -> float:
     return float(numerator / denominator) if denominator else float("nan")
 
 
-def _sigmoid(values:np.ndarray)->np.ndarray: return 1/(1+np.exp(-values))
-def _entropy(probabilities:np.ndarray)->np.ndarray:
-    p=np.clip(probabilities,1e-12,1-1e-12);return -(p*np.log(p)+(1-p)*np.log(1-p))
-def _distribution(values:np.ndarray)->dict[str,float|int|None]: return {"count":int(len(values)),"mean":float(np.mean(values)) if len(values) else None,"median":float(np.median(values)) if len(values) else None}
+def _ensure_uncertainty_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Add deterministic fields while preserving ensemble disagreement fields."""
+    result = frame.copy()
+    deterministic = {"confidence", "uncertainty", "confidence_uncertainty", "predictive_entropy"}
+    if not deterministic.issubset(result.columns):
+        result = add_deterministic_uncertainty(result)
+    return result
+
+
+def _available_uncertainty_measures(frame: pd.DataFrame) -> tuple[str, ...]:
+    """Return supported measures that can be evaluated on this prediction frame."""
+    return tuple(measure for measure in UNCERTAINTY_MEASURES if measure in frame.columns)
+
+
+def _sigmoid(values: np.ndarray) -> np.ndarray:
+    return 1 / (1 + np.exp(-values))
+
+
+def _entropy(probabilities: np.ndarray) -> np.ndarray:
+    """Compute stable binary entropy in nats for scalar or stacked probabilities."""
+    clipped = np.clip(probabilities, ENTROPY_EPSILON, 1 - ENTROPY_EPSILON)
+    return -(clipped * np.log(clipped) + (1 - clipped) * np.log(1 - clipped))
+
+
+def _distribution(values: np.ndarray) -> dict[str, float | int | None]:
+    return {
+        "count": int(len(values)),
+        "mean": float(np.mean(values)) if len(values) else None,
+        "median": float(np.median(values)) if len(values) else None,
+    }

@@ -22,7 +22,10 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
     evaluate_predictions,
     failure_detection,
     fit_temperature,
+    failure_detection_all,
+    failure_detection_table,
     selective_prediction,
+    selective_prediction_all,
     select_threshold,
     validate_predictions,
 )
@@ -131,7 +134,23 @@ def test_master_evaluation_generates_portable_figures(tmp_path: Path) -> None:
     validation = _predictions()
     test = _predictions("test")
     evaluate_predictions(validation, test, tmp_path, "fixed_0.5", 10, 7)
-    for filename in ("metrics.json", "metrics.csv", "calibration.json", "bootstrap_confidence_intervals.csv", "selective_prediction.csv", "failure_detection.json", "risk_coverage.csv", "reliability_diagram.png", "roc_curve.png", "pr_curve.png", "risk_coverage.png", "uncertainty_distribution.png"):
+    for filename in (
+        "metrics.json",
+        "metrics.csv",
+        "calibration.json",
+        "bootstrap_confidence_intervals.csv",
+        "selective_prediction.csv",
+        "failure_detection.json",
+        "risk_coverage.csv",
+        "reliability_diagram.png",
+        "roc_curve.png",
+        "pr_curve.png",
+        "risk_coverage.png",
+        "uncertainty_distribution.png",
+        "validation_uncertainty_auroc_comparison.png",
+        "validation_uncertainty_auprc_comparison.png",
+        "validation_uncertainty_risk_coverage.png",
+    ):
         assert (tmp_path / filename).is_file()
 
 
@@ -148,3 +167,44 @@ def test_deep_ensemble_comparison_and_paired_statistics(tmp_path: Path) -> None:
     assert result["paired_bootstrap_auroc"]["iterations"] == 20
     for filename in ("single_confidence_histogram.png", "ensemble_confidence_histogram.png", "single_vs_ensemble.json"):
         assert (tmp_path / filename).is_file()
+
+
+def test_disagreement_uncertainty_detects_synthetic_errors_better_than_confidence() -> None:
+    targets = np.array([1, 0, 1, 0, 0, 1, 0, 1])
+    member_probabilities = np.array([
+        [.6, .4, .6, .4, .95, .05, .95, .05],
+        [.6, .4, .6, .4, .15, .85, .15, .85],
+        [.6, .4, .6, .4, .7, .3, .7, .3],
+    ])
+    members = []
+    for probabilities in member_probabilities:
+        member = _predictions().assign(
+            binary_target=targets,
+            original_label=targets,
+            probability=probabilities,
+            logit=np.log(probabilities / (1 - probabilities)),
+        )
+        members.append(member)
+
+    ensemble = aggregate_ensemble(members)
+    analyses = failure_detection_all(ensemble, threshold=.5)
+    table = failure_detection_table(analyses)
+    selective, curves = selective_prediction_all(ensemble, threshold=.5)
+
+    assert analyses["binary_member_disagreement_rate"]["error_detection_auroc"] > analyses["confidence_uncertainty"]["error_detection_auroc"]
+    assert analyses["member_probability_variance"]["error_detection_auroc"] > analyses["confidence_uncertainty"]["error_detection_auroc"]
+    assert set(table["uncertainty_measure"]) >= {
+        "binary_member_disagreement_rate",
+        "confidence_uncertainty",
+    }
+    assert set(selective["uncertainty_measure"]) == set(curves["uncertainty_measure"])
+
+
+def test_identical_ensemble_members_have_negligible_epistemic_uncertainty() -> None:
+    frame = _predictions()
+    ensemble = aggregate_ensemble([frame, frame.copy(), frame.copy()])
+
+    assert np.allclose(ensemble["mutual_information"], 0, atol=1e-12)
+    assert np.allclose(ensemble["member_probability_variance"], 0, atol=1e-15)
+    assert np.allclose(ensemble["member_probability_standard_deviation"], 0, atol=1e-15)
+    assert {"member_probability_0", "member_probability_1", "member_probability_2"} <= set(ensemble)
