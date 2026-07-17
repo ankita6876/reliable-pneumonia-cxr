@@ -43,6 +43,17 @@ UNCERTAINTY_MEASURES = (
 
 def validate_predictions(frame: pd.DataFrame, *, require_logits: bool = True) -> pd.DataFrame:
     """Validate schema, finite values, binary labels, portable paths, and unique identities."""
+    frame = frame.copy()
+    # External files use clearer generic names; normalize them to the long-lived
+    # internal schema while retaining their original columns for traceability.
+    aliases = {"image_id": "study_id", "label": "binary_target", "model": "model_name", "checkpoint": "run_id"}
+    for source, destination in aliases.items():
+        if destination not in frame and source in frame:
+            frame[destination] = frame[source]
+    if "original_label" not in frame and "binary_target" in frame:
+        frame["original_label"] = frame["binary_target"]
+    if "predicted_class" not in frame and "probability" in frame:
+        frame["predicted_class"] = (pd.to_numeric(frame["probability"], errors="coerce") >= .5).astype(int)
     required = set(PREDICTION_COLUMNS if require_logits else ("patient_id", "study_id", "image_path", "binary_target", "probability", "split"))
     missing = sorted(required - set(frame.columns))
     if missing:
@@ -175,11 +186,12 @@ def add_deterministic_uncertainty(frame: pd.DataFrame) -> pd.DataFrame:
 
 def aggregate_ensemble(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
     """Average aligned model outputs and calculate decomposition uncertainty measures."""
-    members = [validate_predictions(item).reset_index(drop=True) for item in frames]
+    members = [validate_predictions(item) for item in frames]
     if len(members) < 2: raise ValueError("An ensemble requires at least two prediction CSV files.")
+    members = [item.sort_values(list(IDENTITY_COLUMNS)).reset_index(drop=True) for item in members]
     identity = members[0][list(IDENTITY_COLUMNS)]
     for member in members[1:]:
-        if not identity.equals(member[list(IDENTITY_COLUMNS)]): raise ValueError("Ensemble inputs have mismatched sample identities or ordering.")
+        if not identity.equals(member[list(IDENTITY_COLUMNS)]): raise ValueError("Ensemble inputs have mismatched sample identities.")
         if not np.array_equal(members[0]["binary_target"], member["binary_target"]): raise ValueError("Ensemble inputs have mismatched binary targets.")
     probabilities = np.stack([item["probability"].to_numpy(float) for item in members])
     logits = np.stack([item["logit"].to_numpy(float) for item in members])
@@ -197,6 +209,7 @@ def aggregate_ensemble(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
         result["predictive_entropy"] - result["mean_member_entropy"], 0.0
     )
     result["member_probability_variance"] = probabilities.var(axis=0)
+    result["variance"] = result["member_probability_variance"]
     result["member_probability_standard_deviation"] = probabilities.std(axis=0)
     result["probability_variance"] = result["member_probability_variance"]
     member_predictions = probabilities >= 0.5
@@ -204,6 +217,7 @@ def aggregate_ensemble(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
         member_predictions.mean(axis=0),
         1 - member_predictions.mean(axis=0),
     )
+    result["binary_disagreement"] = result["binary_member_disagreement_rate"]
     result["logit_variance"] = logits.var(axis=0)
     result = add_deterministic_uncertainty(result)
     return result
@@ -451,17 +465,47 @@ def failure_detection_table(analyses: dict[str, dict[str, Any]]) -> pd.DataFrame
 
 
 def selective_prediction(frame: pd.DataFrame, threshold: float, coverages: tuple[float, ...] = COVERAGES, cutoffs: dict[float, float] | None = None, uncertainty_column: str = "uncertainty") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Evaluate uncertainty-ranked retained subsets without allowing empty subsets to crash.
+
+    Requested coverages use deterministic ranks, rather than quantile comparisons,
+    so ties cannot accidentally retain zero or an uncontrolled number of cases.
+    Explicit cutoffs remain supported for frozen validation cutoffs and report their
+    actual retained coverage.
+    """
     frame = _ensure_uncertainty_columns(frame)
     validate_predictions(frame)
     uncertainty = frame[uncertainty_column]
     rows = []
     curve = []
     for coverage in coverages:
-        cutoff = cutoffs[coverage] if cutoffs else float(
-            np.quantile(uncertainty, coverage, method="higher")
-        )
-        retained = frame.loc[uncertainty <= cutoff]
-        if len(np.unique(retained.binary_target)) == 2:
+        if not 0 < coverage <= 1:
+            raise ValueError("Selective-prediction coverage must be in (0, 1].")
+        if cutoffs is None:
+            target_count = min(len(frame), max(1, int(np.ceil(coverage * len(frame)))))
+            ordered = frame.assign(_uncertainty=uncertainty, _stable_order=np.arange(len(frame)))
+            ordered = ordered.sort_values(["_uncertainty", "_stable_order"], kind="stable")
+            retained = ordered.iloc[:target_count].drop(columns=["_uncertainty", "_stable_order"])
+            cutoff = float(uncertainty.loc[retained.index].max())
+        else:
+            cutoff = float(cutoffs[coverage])
+            retained = frame.loc[uncertainty <= cutoff]
+        actual_coverage = len(retained) / len(frame)
+        if retained.empty:
+            metrics: dict[str, float | int] = {
+                "threshold": threshold,
+                "accuracy": float("nan"),
+                "balanced_accuracy": float("nan"),
+                "sensitivity": float("nan"),
+                "specificity": float("nan"),
+                "precision": float("nan"),
+                "negative_predictive_value": float("nan"),
+                "f1": float("nan"),
+                "true_negative": 0,
+                "false_positive": 0,
+                "false_negative": 0,
+                "true_positive": 0,
+            }
+        elif len(np.unique(retained.binary_target)) == 2:
             metrics = discrimination_metrics(retained, threshold)
         else:
             metrics = metrics_at_threshold(
@@ -471,11 +515,12 @@ def selective_prediction(frame: pd.DataFrame, threshold: float, coverages: tuple
             )
         metrics.update({
             "uncertainty_measure": uncertainty_column,
-            "coverage": coverage,
+            "requested_coverage": coverage,
+            "coverage": actual_coverage,
             "uncertainty_cutoff": cutoff,
             "retained_sample_count": len(retained),
             "deferred_sample_count": len(frame) - len(retained),
-            "risk": 1 - metrics["accuracy"],
+            "risk": 1 - float(metrics["accuracy"]),
         })
         rows.append(metrics)
     ordered = frame.assign(_uncertainty=uncertainty).sort_values("_uncertainty").reset_index(drop=True)

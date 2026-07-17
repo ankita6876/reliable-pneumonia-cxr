@@ -7,10 +7,11 @@ import pandas as pd
 from PIL import Image
 import torch
 from torch.utils.data import Dataset
+from pneumonia_ai.data.dicom import dicom_to_pil
 
 STANDARD_COLUMNS = ("dataset", "split", "patient_id", "study_id", "image_path", "pneumonia_label")
 SUPPORTED_DATASETS = frozenset({"chexpert", "nih", "mimic"})
-SUPPORTED_SPLITS = frozenset({"train", "validation", "test", "external"})
+SUPPORTED_SPLITS = frozenset({"train", "validation", "test", "external", "external_test"})
 
 
 class MultiDatasetValidationError(ValueError):
@@ -55,8 +56,11 @@ class UnifiedPneumoniaDataset(Dataset[dict[str, object]]):
 
     def __getitem__(self, index: int) -> dict[str, object]:
         row = self.records.iloc[index]
-        with Image.open(self.paths[index]) as source:
-            image = source.convert("RGB")
+        if self.paths[index].suffix.lower() == ".dcm":
+            image = dicom_to_pil(self.paths[index])
+        else:
+            with Image.open(self.paths[index]) as source:
+                image = source.convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
         label = float(row["pneumonia_label"])

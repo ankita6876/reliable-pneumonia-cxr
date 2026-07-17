@@ -9,3 +9,4 @@ matplotlib
 pyyaml
 pytest
 ruff
+pydicom

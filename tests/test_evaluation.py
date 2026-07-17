@@ -82,11 +82,37 @@ def test_temperature_bootstrap_ensemble_uncertainty_and_selective_prediction() -
     pd.testing.assert_frame_equal(first, second)
     ensemble = aggregate_ensemble([frame, frame.assign(logit=frame.logit + .1)])
     assert {"mutual_information", "probability_variance", "logit_variance"} <= set(ensemble)
-    with pytest.raises(ValueError, match="mismatched"):
-        aggregate_ensemble([frame, frame.iloc[::-1].reset_index(drop=True)])
+    reordered = aggregate_ensemble([frame, frame.iloc[::-1].reset_index(drop=True)])
+    assert reordered["patient_id"].tolist() == sorted(frame["patient_id"].tolist())
     selective, curve = selective_prediction(add_deterministic_uncertainty(frame), .5)
     assert selective.retained_sample_count.is_monotonic_decreasing
     assert curve.coverage.is_monotonic_increasing
+
+
+def test_selective_prediction_uses_deterministic_rank_retention_for_tiny_tied_data() -> None:
+    frame = _predictions().iloc[:3].copy()
+    frame["uncertainty"] = [.2, .2, .2]
+    frame["confidence"] = .8
+    frame["confidence_uncertainty"] = .2
+    frame["predictive_entropy"] = .5
+    selective, _ = selective_prediction(frame, .5, coverages=(.01, .5, 1.0))
+
+    assert selective["retained_sample_count"].tolist() == [1, 2, 3]
+    assert selective["coverage"].tolist() == [1 / 3, 2 / 3, 1.0]
+    assert selective["requested_coverage"].tolist() == [.01, .5, 1.0]
+
+
+def test_selective_prediction_explicit_minimum_cutoff_returns_structured_empty_row() -> None:
+    frame = _predictions().iloc[:2].copy()
+    frame["uncertainty"] = [.2, .3]
+    frame["confidence"] = [.8, .7]
+    frame["confidence_uncertainty"] = [.2, .3]
+    frame["predictive_entropy"] = [.5, .6]
+    selective, _ = selective_prediction(frame, .5, coverages=(.5,), cutoffs={.5: .1})
+
+    row = selective.iloc[0]
+    assert row.retained_sample_count == 0 and row.coverage == 0
+    assert np.isnan(row.accuracy) and np.isnan(row.risk)
 
 
 def test_bootstrap_returns_summary_when_every_resample_fails() -> None:
