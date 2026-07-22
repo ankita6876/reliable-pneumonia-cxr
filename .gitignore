@@ -36,3 +36,5 @@ outputs/*
 .vscode/
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
+
+.venv_broken_*/
