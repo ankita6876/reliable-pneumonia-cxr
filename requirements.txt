@@ -4,6 +4,7 @@ timm
 torchxrayvision
 pandas
 numpy
+opencv-python-headless
 scikit-learn
 matplotlib
 pyyaml
