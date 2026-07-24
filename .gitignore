@@ -38,3 +38,5 @@ outputs/*
 **/.ipynb_checkpoints/
 
 .venv_broken_*/
+
+*.egg-info/
