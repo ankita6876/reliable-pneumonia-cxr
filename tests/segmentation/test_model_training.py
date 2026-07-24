@@ -44,7 +44,7 @@ def test_dice_loss_distinguishes_perfect_and_incorrect_predictions() -> None:
     loss = BinaryDiceLoss()
 
     assert loss(perfect_logits, targets).item() < 1e-4
-    assert loss(incorrect_logits, targets).item() > 0.99
+    assert loss(incorrect_logits, targets).item() == pytest.approx(0.8, abs=1e-6)
 
 
 def test_combined_loss_respects_configured_weights() -> None:
