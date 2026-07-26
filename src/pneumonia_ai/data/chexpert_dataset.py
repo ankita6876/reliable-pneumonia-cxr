@@ -8,6 +8,10 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset
 
+from pneumonia_ai.classification.segmentation_guided import InputMode, prepare_classifier_image
+from pneumonia_ai.segmentation.cache import MaskCache
+from pneumonia_ai.segmentation.inference import FrozenLungSegmenter
+
 
 VALID_SPLITS = frozenset({"train", "validation", "test"})
 VALID_LABELS = frozenset({1, 0, -1})
@@ -33,6 +37,12 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         manifest_path: Path | str,
         split: str,
         transform: Callable[[Image.Image], object] | None = None,
+        input_mode: InputMode | str = InputMode.ORIGINAL,
+        lung_segmenter: FrozenLungSegmenter | None = None,
+        mask_cache: MaskCache | None = None,
+        mask_threshold: float = 0.5,
+        lung_crop_padding: int = 0,
+        classifier_image_size: int | tuple[int, int] | None = None,
     ) -> None:
         """Load one manifest split and validate its image references.
 
@@ -112,6 +122,17 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             for image_path in self._resolved_image_paths
         ]
         self.transform = transform
+        try:
+            self.input_mode = InputMode(input_mode)
+        except ValueError as error:
+            raise DatasetValidationError("input_mode must be original, hard_masked, or lung_crop.") from error
+        if self.input_mode is not InputMode.ORIGINAL and lung_segmenter is None:
+            raise DatasetValidationError("hard_masked and lung_crop input modes require lung_segmenter.")
+        self.lung_segmenter = lung_segmenter
+        self.mask_cache = mask_cache
+        self.mask_threshold = mask_threshold
+        self.lung_crop_padding = lung_crop_padding
+        self.classifier_image_size = classifier_image_size
 
     def __len__(self) -> int:
         """Return the number of rows in the requested split."""
@@ -122,6 +143,13 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         row = self.records.iloc[index]
         with Image.open(self._resolved_image_paths[index]) as opened_image:
             image = opened_image.convert("RGB")
+        if self.input_mode is not InputMode.ORIGINAL or self.classifier_image_size is not None:
+            probability_mask = self._probability_mask(index, image)
+            image = prepare_classifier_image(
+                image, self.input_mode, segmenter=self.lung_segmenter,
+                threshold=self.mask_threshold, crop_padding=self.lung_crop_padding,
+                output_size=self.classifier_image_size, probability_mask=probability_mask,
+            )
         if self.transform is not None:
             image = self.transform(image)
         return {
@@ -136,6 +164,24 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             "study_id": row["study_id"],
             "image_path": self._returned_image_paths[index],
         }
+
+    def _probability_mask(self, index: int, image: Image.Image) -> torch.Tensor | None:
+        if self.input_mode is InputMode.ORIGINAL:
+            return None
+        assert self.lung_segmenter is not None
+        if self.mask_cache is None:
+            return self.lung_segmenter.predict_proba(image)
+        key = self.mask_cache.key(
+            self._resolved_image_paths[index],
+            self.lung_segmenter.checkpoint_path,
+            self.mask_threshold,
+            self.lung_segmenter.image_size,
+        )
+        mask = self.mask_cache.get(key)
+        if mask is None:
+            mask = self.lung_segmenter.predict_proba(image)
+            self.mask_cache.set(key, mask)
+        return mask
 
 
 def _resolve_manifest_image_path(dataset_root: Path, image_path: object) -> Path:
