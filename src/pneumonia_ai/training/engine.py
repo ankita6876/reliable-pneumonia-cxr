@@ -265,6 +265,7 @@ def run_training(
     best_auroc = -math.inf
     start_epoch = 1
     checkpoint_path = output_path / "best_validation_auroc.pt"
+    last_checkpoint_path = output_path / "last_checkpoint.pt"
     if resume_checkpoint is not None:
         resume_state = torch.load(resume_checkpoint, map_location=device, weights_only=False)
         _restore_checkpoint(
@@ -314,6 +315,16 @@ def run_training(
             )
         else:
             no_improvement_epochs += 1
+        _save_checkpoint_atomic(
+            last_checkpoint_path,
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scaler=scaler,
+            epoch=epoch,
+            best_validation_auroc=best_auroc,
+            configuration=configuration,
+        )
         if no_improvement_epochs >= early_stopping_patience:
             break
     history_frame = pd.DataFrame(history)

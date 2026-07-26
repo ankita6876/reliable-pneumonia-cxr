@@ -318,11 +318,19 @@ def test_early_stopping_scheduler_and_best_checkpoint(monkeypatch, tmp_path: Pat
     history = run_training(**_training_arguments(tmp_path))
 
     checkpoint_paths = list(tmp_path.glob("*.pt"))
-    checkpoint = torch.load(checkpoint_paths[0], map_location="cpu", weights_only=False)
+    best_checkpoint = torch.load(
+        tmp_path / "best_validation_auroc.pt", map_location="cpu", weights_only=False
+    )
+    last_checkpoint = torch.load(
+        tmp_path / "last_checkpoint.pt", map_location="cpu", weights_only=False
+    )
     assert len(history) == 3
     assert history.loc[1, "learning_rate"] == 0.05
-    assert len(checkpoint_paths) == 1
-    assert set(checkpoint) >= {
+    assert {path.name for path in checkpoint_paths} == {
+        "best_validation_auroc.pt",
+        "last_checkpoint.pt",
+    }
+    assert set(best_checkpoint) >= {
         "model_state_dict",
         "optimizer_state_dict",
         "scheduler_state_dict",
@@ -330,6 +338,7 @@ def test_early_stopping_scheduler_and_best_checkpoint(monkeypatch, tmp_path: Pat
         "best_validation_auroc",
         "configuration",
     }
+    assert last_checkpoint["epoch"] == 3
 
 
 def test_resume_restores_best_checkpoint_and_rejects_incompatible_config(
