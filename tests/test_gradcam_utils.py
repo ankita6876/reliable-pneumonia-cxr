@@ -11,6 +11,7 @@ import torch
 from torch import nn
 
 from scripts.analysis import generate_gradcam
+from scripts.classification import evaluate_ablation
 from scripts.analysis.gradcam_utils import (
     GradCAM,
     SelectedCase,
@@ -57,18 +58,89 @@ def test_classifier_loading_moves_model_to_selected_device(tmp_path: Path, monke
             return super().to(*args, **kwargs)  # type: ignore[arg-type]
 
     model = TrackingModel()
-    state = {
-        "configuration": {"input_mode": "hard_masked", "model": "test-model"},
-        "model_state_dict": model.state_dict(),
+    configuration = {
+        "input_mode": "hard_masked", "model": "test-model",
+        "classifier_image_size": 224, "mask_threshold": 0.5, "lung_crop_padding": 0,
     }
+    state = {"configuration": configuration, "model_state_dict": model.state_dict()}
     monkeypatch.setattr(generate_gradcam.torch, "load", lambda *args, **kwargs: state)
     monkeypatch.setattr(generate_gradcam, "create_model", lambda *args, **kwargs: model)
 
-    loaded, _ = generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
+    loaded, normalized = generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
 
     assert loaded is model
+    assert normalized == configuration
+    assert normalized is not configuration
     assert model.received_device == torch.device("cpu")
     assert next(model.parameters()).device == torch.device("cpu")
+
+
+def test_gradcam_loads_legacy_hard_masked_checkpoint_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint = tmp_path / "classifier.pt"
+    checkpoint.touch()
+    configuration = {
+        "model": "test-model", "input_size": 320,
+        "mask_threshold": 0.6, "lung_crop_padding": 2,
+    }
+    state = {"configuration": configuration, "model_state_dict": {}}
+    model = nn.Identity()
+    monkeypatch.setattr(generate_gradcam.torch, "load", lambda *args, **kwargs: state)
+    monkeypatch.setattr(generate_gradcam, "create_model", lambda *args, **kwargs: model)
+
+    _, normalized = generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
+
+    assert normalized["input_mode"] == "hard_masked"
+    assert normalized["classifier_image_size"] == 320
+    assert configuration == state["configuration"]
+    assert "input_mode" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("input_mode", ["original", "lung_crop"])
+def test_gradcam_rejects_explicit_non_hard_masked_checkpoint_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, input_mode: str,
+) -> None:
+    checkpoint = tmp_path / "classifier.pt"
+    checkpoint.touch()
+    state = {
+        "configuration": {
+            "input_mode": input_mode, "classifier_image_size": 224,
+            "mask_threshold": 0.5, "lung_crop_padding": 0,
+        },
+        "model_state_dict": {},
+    }
+    monkeypatch.setattr(generate_gradcam.torch, "load", lambda *args, **kwargs: state)
+
+    with pytest.raises(ValueError, match="supports only a hard_masked"):
+        generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
+
+
+def test_gradcam_rejects_invalid_explicit_input_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkpoint = tmp_path / "classifier.pt"
+    checkpoint.touch()
+    state = {
+        "configuration": {
+            "input_mode": "invalid", "classifier_image_size": 224,
+            "mask_threshold": 0.5, "lung_crop_padding": 0,
+        },
+        "model_state_dict": {},
+    }
+    monkeypatch.setattr(generate_gradcam.torch, "load", lambda *args, **kwargs: state)
+
+    with pytest.raises(ValueError, match="input_mode.*expected original, hard_masked, or lung_crop"):
+        generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
+
+
+def test_evaluator_and_gradcam_share_checkpoint_normalization() -> None:
+    configuration = {"input_size": 256}
+
+    assert generate_gradcam.normalize_checkpoint_configuration is evaluate_ablation.normalize_checkpoint_configuration
+    assert generate_gradcam.normalize_checkpoint_configuration(configuration) == (
+        evaluate_ablation.normalize_checkpoint_configuration(configuration)
+    )
 
 
 def test_gradcam_forwards_input_on_model_device() -> None:

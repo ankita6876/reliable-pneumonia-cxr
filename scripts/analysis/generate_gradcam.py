@@ -15,6 +15,7 @@ import torch
 from torchvision import transforms
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from pneumonia_ai.classification.segmentation_guided import InputMode, prepare_classifier_image  # noqa: E402
@@ -23,6 +24,10 @@ from pneumonia_ai.models.factory import create_model  # noqa: E402
 from pneumonia_ai.segmentation.cache import MaskCache  # noqa: E402
 from pneumonia_ai.segmentation.inference import FrozenLungSegmenter  # noqa: E402
 from pneumonia_ai.training.seed import seed_everything  # noqa: E402
+from scripts.classification.checkpoint_compatibility import (  # noqa: E402
+    load_adjacent_experiment_configuration,
+    normalize_checkpoint_configuration,
+)
 
 try:
     from .gradcam_utils import (
@@ -80,7 +85,9 @@ def _load_classifier(checkpoint: Path, device: torch.device) -> tuple[torch.nn.M
         raise ValueError("Classifier checkpoint lacks its required configuration dictionary.")
     if not isinstance(state.get("model_state_dict"), dict):
         raise ValueError("Classifier checkpoint lacks model_state_dict.")
-    configuration: dict[str, object] = state["configuration"]
+    configuration = normalize_checkpoint_configuration(
+        state["configuration"], load_adjacent_experiment_configuration(checkpoint)
+    )
     if configuration.get("input_mode") != InputMode.HARD_MASKED.value:
         raise ValueError("This analysis supports only a hard_masked classifier checkpoint.")
     model_name = str(configuration.get("model", "densenet121"))
