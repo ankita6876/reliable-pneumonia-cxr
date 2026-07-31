@@ -20,7 +20,7 @@ from pneumonia_ai.data.chexpert_dataset import (
 
 from scripts.classification.compare_ablations import build_comparison
 from scripts.classification import train_ablation
-from scripts.classification.evaluate_ablation import _resolve_input_mode
+from scripts.classification.evaluate_ablation import normalize_checkpoint_configuration
 
 
 def _config(tmp_path: Path, mode: str, checkpoint: Path | None = None) -> AblationConfig:
@@ -148,17 +148,89 @@ def test_training_cli_smoke_parses_original_without_segmenter(
     assert args.segmentation_checkpoint is None
 
 
-def test_evaluation_uses_explicit_input_mode() -> None:
-    assert _resolve_input_mode({"input_mode": "lung_crop"}).value == "lung_crop"
-
-
-def test_evaluation_uses_hard_masked_mode_for_legacy_checkpoint(
+def test_evaluation_normalizes_modern_checkpoint_configuration(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert _resolve_input_mode({}).value == "hard_masked"
-    assert "WARNING" in capsys.readouterr().out
+    configuration = {
+        "input_mode": "lung_crop", "classifier_image_size": 256,
+        "mask_threshold": 0.7, "lung_crop_padding": 3,
+    }
+
+    normalized = normalize_checkpoint_configuration(configuration)
+
+    assert normalized == configuration
+    assert normalized is not configuration
+    assert not capsys.readouterr().out
 
 
-def test_evaluation_rejects_invalid_explicit_input_mode() -> None:
-    with pytest.raises(ValueError, match="input_mode"):
-        _resolve_input_mode({"input_mode": "masked"})
+def test_evaluation_normalizes_missing_legacy_input_mode(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    normalized = normalize_checkpoint_configuration(
+        {"classifier_image_size": 224, "mask_threshold": 0.5, "lung_crop_padding": 0}
+    )
+
+    assert normalized["input_mode"] == "hard_masked"
+    assert "input_mode" in capsys.readouterr().out
+
+
+def test_evaluation_normalizes_legacy_input_size_alias(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    normalized = normalize_checkpoint_configuration(
+        {"input_mode": "hard_masked", "input_size": 224, "mask_threshold": 0.5,
+         "lung_crop_padding": 0}
+    )
+
+    assert normalized["classifier_image_size"] == 224
+    assert "checkpoint input_size" in capsys.readouterr().out
+
+
+def test_evaluation_uses_adjacent_configuration_for_missing_legacy_fields(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    normalized = normalize_checkpoint_configuration(
+        {"input_mode": "hard_masked"},
+        {"input_size": 256, "mask_threshold": 0.6, "lung_crop_padding": 2},
+    )
+
+    assert normalized["classifier_image_size"] == 256
+    assert normalized["mask_threshold"] == 0.6
+    assert normalized["lung_crop_padding"] == 2
+    assert capsys.readouterr().out.count("adjacent config.json") == 3
+
+
+def test_evaluation_normalizes_multiple_legacy_fields(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    normalized = normalize_checkpoint_configuration({})
+
+    assert normalized == {
+        "input_mode": "hard_masked", "classifier_image_size": 224,
+        "mask_threshold": 0.5, "lung_crop_padding": 0,
+    }
+    assert capsys.readouterr().out.count("WARNING") == 4
+
+
+def test_evaluation_preserves_checkpoint_values_over_adjacent_configuration() -> None:
+    normalized = normalize_checkpoint_configuration(
+        {"input_mode": "original", "classifier_image_size": 320, "mask_threshold": 0.6,
+         "lung_crop_padding": 4},
+        {"input_mode": "hard_masked", "input_size": 224, "mask_threshold": 0.5,
+         "lung_crop_padding": 0},
+    )
+
+    assert normalized["input_mode"] == "original"
+    assert normalized["classifier_image_size"] == 320
+    assert normalized["mask_threshold"] == 0.6
+    assert normalized["lung_crop_padding"] == 4
+
+
+def test_evaluation_reports_all_unresolved_configuration_fields() -> None:
+    with pytest.raises(ValueError, match=(
+        "input_mode.*classifier_image_size.*mask_threshold.*lung_crop_padding"
+    )):
+        normalize_checkpoint_configuration(
+            {"input_mode": None, "classifier_image_size": None,
+             "mask_threshold": None, "lung_crop_padding": None}
+        )
