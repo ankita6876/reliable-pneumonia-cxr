@@ -60,11 +60,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cases-per-category", type=int, default=5)
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="cpu", choices=("cpu",))
+    parser.add_argument("--device", default="cpu", choices=("cpu", "cuda"))
     return parser.parse_args()
 
 
-def _load_classifier(checkpoint: Path, device: str) -> tuple[torch.nn.Module, dict[str, object]]:
+def _resolve_device(device: str) -> torch.device:
+    """Return the requested device after validating CUDA availability."""
+    if device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("--device cuda was requested, but torch.cuda.is_available() is False.")
+    return torch.device(device)
+
+
+def _load_classifier(checkpoint: Path, device: torch.device) -> tuple[torch.nn.Module, dict[str, object]]:
     """Recreate and load the exact classifier architecture saved in a checkpoint."""
     if not checkpoint.is_file():
         raise FileNotFoundError(f"Classifier checkpoint does not exist: {checkpoint}")
@@ -140,12 +147,13 @@ def generate_gradcam_analysis(
     device: str = "cpu",
 ) -> tuple[pd.DataFrame, pd.DataFrame, str]:
     """Generate explanation figures, manifests, localisation summaries, and montages."""
+    resolved_device = _resolve_device(device)
     if not predictions_csv.is_file():
         raise FileNotFoundError(f"Held-out predictions CSV does not exist: {predictions_csv}")
     if not 0 < threshold < 1:
         raise ValueError("threshold must lie strictly between 0 and 1.")
     seed_everything(seed)
-    model, configuration = _load_classifier(classifier_checkpoint, device)
+    model, configuration = _load_classifier(classifier_checkpoint, resolved_device)
     resolved_root = image_root or Path(str(configuration.get("image_root", "")))
     if not resolved_root.is_dir():
         raise NotADirectoryError("Image root is unavailable. Supply --image-root with the CheXpert extraction directory.")
@@ -157,7 +165,7 @@ def generate_gradcam_analysis(
         raise ValueError("No TP, TN, FP, or FN examples were found in the prediction file.")
 
     output_directory.mkdir(parents=True, exist_ok=True)
-    segmenter = FrozenLungSegmenter(segmentation_checkpoint, device)
+    segmenter = FrozenLungSegmenter(segmentation_checkpoint, resolved_device)
     cache = MaskCache(output_directory / "mask_cache")
     with tempfile.TemporaryDirectory() as temporary:
         dataset = CheXpertPneumoniaDataset(
@@ -166,7 +174,7 @@ def generate_gradcam_analysis(
             mask_threshold=mask_threshold, lung_crop_padding=int(configuration.get("lung_crop_padding", 0)),
             classifier_image_size=image_size, allow_absolute_image_paths=True,
         )
-        probe = dataset[0]["image"].unsqueeze(0).to(device)
+        probe = dataset[0]["image"].unsqueeze(0).to(resolved_device)
         layer_name, layer = select_target_layer(model, probe)
         gradcam = GradCAM(model, layer)
         manifest_rows: list[dict[str, object]] = []
@@ -183,7 +191,7 @@ def generate_gradcam_analysis(
                     original, InputMode.HARD_MASKED, segmenter=segmenter, threshold=mask_threshold,
                     probability_mask=segmenter.predict_proba(original),
                 )
-                cam = gradcam.generate(sample["image"].unsqueeze(0).to(device), case.prediction)
+                cam = gradcam.generate(sample["image"].unsqueeze(0).to(resolved_device), case.prediction)
                 resized_mask = np.asarray(
                     Image.fromarray(mask.astype(np.uint8)).resize((image_size, image_size), Image.Resampling.NEAREST), dtype=bool
                 )

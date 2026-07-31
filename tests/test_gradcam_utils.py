@@ -1,17 +1,96 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
 from PIL import Image
+import pytest
+import torch
+from torch import nn
 
+from scripts.analysis import generate_gradcam
 from scripts.analysis.gradcam_utils import (
+    GradCAM,
     SelectedCase,
     activation_localisation,
     save_case_figure,
     select_representative_cases,
 )
+
+
+def test_gradcam_parser_accepts_cpu_and_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both supported execution devices are accepted by the Grad-CAM CLI."""
+    monkeypatch.setattr(sys, "argv", ["generate_gradcam.py", "--device", "cpu"])
+    assert generate_gradcam.parse_args().device == "cpu"
+    monkeypatch.setattr(sys, "argv", ["generate_gradcam.py", "--device", "cuda"])
+    assert generate_gradcam.parse_args().device == "cuda"
+
+
+def test_gradcam_cuda_preflight_rejects_unavailable_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(generate_gradcam.torch.cuda, "is_available", lambda: False)
+
+    with pytest.raises(RuntimeError, match=r"--device cuda was requested.*is_available\(\) is False"):
+        generate_gradcam.generate_gradcam_analysis(
+            classifier_checkpoint=Path("missing-classifier.pt"),
+            predictions_csv=Path("missing-predictions.csv"),
+            segmentation_checkpoint=Path("missing-segmenter.pt"),
+            output_directory=Path("unused"),
+            device="cuda",
+        )
+
+
+def test_classifier_loading_moves_model_to_selected_device(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CPU checkpoint loading is followed by model placement on the selected device."""
+    checkpoint = tmp_path / "classifier.pt"
+    checkpoint.touch()
+
+    class TrackingModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.layer = nn.Conv2d(1, 1, 1)
+            self.received_device: torch.device | None = None
+
+        def to(self, *args: object, **kwargs: object) -> "TrackingModel":
+            self.received_device = torch.device(args[0])
+            return super().to(*args, **kwargs)  # type: ignore[arg-type]
+
+    model = TrackingModel()
+    state = {
+        "configuration": {"input_mode": "hard_masked", "model": "test-model"},
+        "model_state_dict": model.state_dict(),
+    }
+    monkeypatch.setattr(generate_gradcam.torch, "load", lambda *args, **kwargs: state)
+    monkeypatch.setattr(generate_gradcam, "create_model", lambda *args, **kwargs: model)
+
+    loaded, _ = generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
+
+    assert loaded is model
+    assert model.received_device == torch.device("cpu")
+    assert next(model.parameters()).device == torch.device("cpu")
+
+
+def test_gradcam_forwards_input_on_model_device() -> None:
+    """Grad-CAM's forward/backward path preserves the classifier input device."""
+    class RecordingModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.conv = nn.Conv2d(1, 1, 1)
+            self.input_device: torch.device | None = None
+
+        def forward(self, image: torch.Tensor) -> torch.Tensor:
+            self.input_device = image.device
+            return self.conv(image).mean(dim=(2, 3))
+
+    model = RecordingModel().to("cpu")
+    cam = GradCAM(model, model.conv)
+    try:
+        _ = cam.generate(torch.ones(1, 1, 4, 4, device="cpu"), predicted_class=1)
+    finally:
+        cam.close()
+
+    assert model.input_device == next(model.parameters()).device
 
 
 def test_case_selection_prefers_high_confidence_examples() -> None:
