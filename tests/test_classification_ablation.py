@@ -16,6 +16,7 @@ from pneumonia_ai.data.chexpert_dataset import CheXpertPneumoniaDataset
 
 from scripts.classification.compare_ablations import build_comparison
 from scripts.classification import train_ablation
+from scripts.classification.evaluate_ablation import _resolve_input_mode
 
 
 def _config(tmp_path: Path, mode: str, checkpoint: Path | None = None) -> AblationConfig:
@@ -121,3 +122,19 @@ def test_training_cli_smoke_parses_original_without_segmenter(
     assert args.splits_csv == tmp_path / "chexpert_splits.csv"
     assert args.image_root == tmp_path
     assert args.segmentation_checkpoint is None
+
+
+def test_evaluation_uses_explicit_input_mode() -> None:
+    assert _resolve_input_mode({"input_mode": "lung_crop"}).value == "lung_crop"
+
+
+def test_evaluation_uses_hard_masked_mode_for_legacy_checkpoint(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert _resolve_input_mode({}).value == "hard_masked"
+    assert "WARNING" in capsys.readouterr().out
+
+
+def test_evaluation_rejects_invalid_explicit_input_mode() -> None:
+    with pytest.raises(ValueError, match="input_mode"):
+        _resolve_input_mode({"input_mode": "masked"})

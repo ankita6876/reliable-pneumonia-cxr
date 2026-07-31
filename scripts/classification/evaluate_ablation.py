@@ -57,7 +57,7 @@ def evaluate_ablation(
     configuration = state.get("configuration")
     if not isinstance(configuration, dict):
         raise ValueError("Classifier checkpoint lacks an ablation configuration.")
-    mode = InputMode(str(configuration["input_mode"]))
+    mode = _resolve_input_mode(configuration)
     if mode is not InputMode.ORIGINAL and segmentation_checkpoint is None:
         raise ValueError("Guided ablation evaluation requires --segmentation-checkpoint.")
     size = int(configuration["classifier_image_size"])
@@ -105,6 +105,23 @@ def evaluate_ablation(
     (output_directory / "confusion_matrix.json").write_text(json.dumps(confusion_matrix(y, p >= .5, labels=[0, 1]).tolist()))
     print(f"Evaluated {len(predictions)} images: {output_directory}")
     return metrics
+
+
+def _resolve_input_mode(configuration: dict[object, object]) -> InputMode:
+    """Use the recorded input mode, or the historical hard-masked pipeline."""
+    if "input_mode" not in configuration:
+        print(
+            "WARNING: Checkpoint configuration has no input_mode; assuming the "
+            "legacy hard-masked lung-segmentation input pipeline (hard_masked)."
+        )
+        return InputMode.HARD_MASKED
+    try:
+        return InputMode(str(configuration["input_mode"]))
+    except ValueError as error:
+        raise ValueError(
+            "Checkpoint configuration input_mode must be one of: original, "
+            "hard_masked, lung_crop."
+        ) from error
 
 
 def _to_rgb(image: object) -> object:
