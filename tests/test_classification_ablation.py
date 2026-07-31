@@ -12,7 +12,11 @@ from pneumonia_ai.classification.ablation import (
     _development_manifest,
     _validate_config,
 )
-from pneumonia_ai.data.chexpert_dataset import CheXpertPneumoniaDataset
+from pneumonia_ai.data.chexpert_dataset import (
+    CheXpertPneumoniaDataset,
+    DatasetValidationError,
+    _resolve_manifest_image_path,
+)
 
 from scripts.classification.compare_ablations import build_comparison
 from scripts.classification import train_ablation
@@ -90,6 +94,26 @@ def test_ablation_image_root_resolves_relative_and_permits_absolute_paths(tmp_pa
 
     assert train._resolved_image_paths == [relative_image]
     assert validation._resolved_image_paths == [absolute_image]
+
+
+def test_manifest_image_path_resolution_is_portable_and_safe(tmp_path: Path) -> None:
+    image_root = tmp_path / "extracted"
+    image_root.mkdir()
+    absolute_image = tmp_path / "outside.jpg"
+
+    assert _resolve_manifest_image_path(image_root, r"train\patient\view.jpg") == (
+        image_root / "train" / "patient" / "view.jpg"
+    )
+    assert _resolve_manifest_image_path(image_root, "train/patient/view.jpg") == (
+        image_root / "train" / "patient" / "view.jpg"
+    )
+    assert _resolve_manifest_image_path(
+        image_root, absolute_image, allow_absolute=True
+    ) == absolute_image.resolve()
+    with pytest.raises(DatasetValidationError, match="relative POSIX path"):
+        _resolve_manifest_image_path(image_root, absolute_image)
+    with pytest.raises(DatasetValidationError, match="relative POSIX path"):
+        _resolve_manifest_image_path(image_root, r"train\..\outside.jpg")
 
 
 def test_ablation_image_root_reports_missing_resolved_image(tmp_path: Path) -> None:

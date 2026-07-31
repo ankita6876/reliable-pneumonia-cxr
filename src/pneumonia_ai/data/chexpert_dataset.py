@@ -209,7 +209,7 @@ def _resolve_manifest_image_path(
         raise DatasetValidationError(
             "Manifest image_path must be a relative POSIX path: " f"{image_path!r}"
         )
-    manifest_path = PurePosixPath(str(image_path))
+    manifest_path = PurePosixPath(str(image_path).replace("\\", "/"))
     if (
         manifest_path.is_absolute()
         or not manifest_path.parts
