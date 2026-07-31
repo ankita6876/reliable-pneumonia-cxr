@@ -4,9 +4,15 @@ import json
 from pathlib import Path
 
 import pandas as pd
+from PIL import Image
 import pytest
 
-from pneumonia_ai.classification.ablation import AblationConfig, _validate_config
+from pneumonia_ai.classification.ablation import (
+    AblationConfig,
+    _development_manifest,
+    _validate_config,
+)
+from pneumonia_ai.data.chexpert_dataset import CheXpertPneumoniaDataset
 
 from scripts.classification.compare_ablations import build_comparison
 from scripts.classification import train_ablation
@@ -15,8 +21,8 @@ from scripts.classification import train_ablation
 def _config(tmp_path: Path, mode: str, checkpoint: Path | None = None) -> AblationConfig:
     return AblationConfig(
         input_mode=mode,
-        train_csv=tmp_path / "train.csv",
-        validation_csv=tmp_path / "validation.csv",
+        splits_csv=tmp_path / "chexpert_splits.csv",
+        image_root=tmp_path,
         output_directory=tmp_path / "output",
         segmentation_checkpoint=checkpoint,
     )
@@ -46,17 +52,72 @@ def test_comparison_csv_has_all_modes_and_metrics(tmp_path: Path) -> None:
     assert pd.read_csv(tmp_path / "comparison.csv").columns.tolist() == ["mode", *values]
 
 
+def test_development_manifest_excludes_test_split(tmp_path: Path) -> None:
+    splits_csv = tmp_path / "chexpert_splits.csv"
+    pd.DataFrame(
+        {
+            "image_path": ["train.png", "validation.png", "test.png"],
+            "split": ["train", "validation", "test"],
+        }
+    ).to_csv(splits_csv, index=False)
+
+    manifest = _development_manifest(splits_csv, tmp_path)
+
+    assert pd.read_csv(manifest)["split"].tolist() == ["train", "validation"]
+
+
+def test_ablation_image_root_resolves_relative_and_permits_absolute_paths(tmp_path: Path) -> None:
+    image_root = tmp_path / "extracted"
+    relative_image = image_root / "train" / "patient" / "view.jpg"
+    relative_image.parent.mkdir(parents=True)
+    Image.new("L", (4, 4)).save(relative_image)
+    absolute_image = tmp_path / "outside.jpg"
+    Image.new("L", (4, 4)).save(absolute_image)
+    manifest = tmp_path / "splits.csv"
+    pd.DataFrame(
+        {
+            "patient_id": ["one", "two"], "study_id": ["one", "two"],
+            "image_path": [r"train\patient\view.jpg", str(absolute_image)],
+            "pneumonia_label": [0, 1], "split": ["train", "validation"],
+        }
+    ).to_csv(manifest, index=False)
+
+    train = CheXpertPneumoniaDataset(image_root, manifest, "train")
+    validation = CheXpertPneumoniaDataset(
+        image_root, manifest, "validation", allow_absolute_image_paths=True
+    )
+
+    assert train._resolved_image_paths == [relative_image]
+    assert validation._resolved_image_paths == [absolute_image]
+
+
+def test_ablation_image_root_reports_missing_resolved_image(tmp_path: Path) -> None:
+    manifest = tmp_path / "splits.csv"
+    pd.DataFrame(
+        {
+            "patient_id": ["one"], "study_id": ["one"],
+            "image_path": ["train/missing.jpg"], "pneumonia_label": [0], "split": ["train"],
+        }
+    ).to_csv(manifest, index=False)
+
+    with pytest.raises(FileNotFoundError, match="missing.jpg"):
+        CheXpertPneumoniaDataset(tmp_path, manifest, "train")
+
+
 def test_training_cli_smoke_parses_original_without_segmenter(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(
         "sys.argv",
         [
-            "train_ablation.py", "--input-mode", "original", "--train-csv",
-            str(tmp_path / "train.csv"), "--validation-csv", str(tmp_path / "validation.csv"),
+            "train_ablation.py", "--input-mode", "original", "--splits-csv",
+            str(tmp_path / "chexpert_splits.csv"),
+            "--image-root", str(tmp_path),
             "--output-directory", str(tmp_path / "output"),
         ],
     )
     args = train_ablation.parse_args()
     assert args.input_mode == "original"
+    assert args.splits_csv == tmp_path / "chexpert_splits.csv"
+    assert args.image_root == tmp_path
     assert args.segmentation_checkpoint is None

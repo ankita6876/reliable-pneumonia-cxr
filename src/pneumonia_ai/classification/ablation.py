@@ -32,8 +32,8 @@ class AblationConfig:
     """Fully specified classifier ablation settings."""
 
     input_mode: str
-    train_csv: Path
-    validation_csv: Path
+    splits_csv: Path
+    image_root: Path
     output_directory: Path
     segmentation_checkpoint: Path | None = None
     checkpoint: Path | None = None
@@ -52,8 +52,8 @@ class AblationConfig:
 def run_ablation(config: AblationConfig) -> Path:
     """Run one mode and return its mode-specific output directory.
 
-    CSV image paths are interpreted relative to the training CSV's directory,
-    matching portable CheXpert manifests. Both CSVs must use that same root.
+    Relative image paths are interpreted from ``image_root``.
+    Only ``train`` and ``validation`` rows are materialised for development.
     """
     mode = _validate_config(config)
     seed_everything(config.seed)
@@ -78,19 +78,37 @@ def run_ablation(config: AblationConfig) -> Path:
         "mask_threshold": config.mask_threshold,
         "lung_crop_padding": config.lung_crop_padding,
         "segmentation_checkpoint": _checkpoint_identity(config.segmentation_checkpoint),
+        "splits_csv": config.splits_csv.name,
+        "image_root": str(config.image_root),
     }
     with tempfile.TemporaryDirectory() as temporary_directory:
-        manifest_path = _combined_manifest(
-            config.train_csv, config.validation_csv, Path(temporary_directory)
-        )
-        root = config.train_csv.parent.resolve()
+        manifest_path = _development_manifest(config.splits_csv, Path(temporary_directory))
+        root = config.image_root.resolve()
         train_dataset = CheXpertPneumoniaDataset(
-            root, manifest_path, "train", train_transform, mode, segmenter, cache,
-            config.mask_threshold, config.lung_crop_padding, config.classifier_image_size,
+            root,
+            manifest_path,
+            "train",
+            train_transform,
+            input_mode=mode,
+            lung_segmenter=segmenter,
+            mask_cache=cache,
+            mask_threshold=config.mask_threshold,
+            lung_crop_padding=config.lung_crop_padding,
+            classifier_image_size=config.classifier_image_size,
+            allow_absolute_image_paths=True,
         )
         validation_dataset = CheXpertPneumoniaDataset(
-            root, manifest_path, "validation", validation_transform, mode, segmenter, cache,
-            config.mask_threshold, config.lung_crop_padding, config.classifier_image_size,
+            root,
+            manifest_path,
+            "validation",
+            validation_transform,
+            input_mode=mode,
+            lung_segmenter=segmenter,
+            mask_cache=cache,
+            mask_threshold=config.mask_threshold,
+            lung_crop_padding=config.lung_crop_padding,
+            classifier_image_size=config.classifier_image_size,
+            allow_absolute_image_paths=True,
         )
         train_loader, validation_loader = create_development_loaders(
             train_dataset, validation_dataset, config.batch_size, config.num_workers, config.seed
@@ -119,17 +137,26 @@ def _validate_config(config: AblationConfig) -> InputMode:
         raise ValueError("batch_size, epochs, and classifier_image_size must be positive.")
     if config.learning_rate <= 0 or config.weight_decay < 0 or config.num_workers < 0:
         raise ValueError("learning_rate must be positive; weight_decay and num_workers non-negative.")
+    if not config.image_root.is_dir():
+        raise NotADirectoryError(f"image_root is not an existing directory: {config.image_root}")
     return mode
 
 
-def _combined_manifest(train_csv: Path, validation_csv: Path, directory: Path) -> Path:
-    train, validation = pd.read_csv(train_csv), pd.read_csv(validation_csv)
-    for frame, split in ((train, "train"), (validation, "validation")):
-        if "image_path" not in frame:
-            raise ValueError("Ablation CSVs must contain image_path.")
-        frame["split"] = split
+def _development_manifest(splits_csv: Path, directory: Path) -> Path:
+    """Write development rows only, excluding the held-out test split."""
+
+    if not splits_csv.is_file():
+        raise FileNotFoundError(f"Split CSV does not exist: {splits_csv}")
+    records = pd.read_csv(splits_csv)
+    required = {"image_path", "split"}
+    missing = sorted(required - set(records.columns))
+    if missing:
+        raise ValueError(f"Split CSV is missing required column(s): {', '.join(missing)}")
+    development = records.loc[records["split"].isin(["train", "validation"])].copy()
+    if set(development["split"]) != {"train", "validation"}:
+        raise ValueError("Split CSV must contain both train and validation rows.")
     path = directory / "ablation_manifest.csv"
-    pd.concat([train, validation], ignore_index=True).to_csv(path, index=False)
+    development.to_csv(path, index=False)
     return path
 
 
@@ -164,5 +191,7 @@ def _write_metadata(directory: Path, effective: dict[str, object], config: Ablat
         "device": config.device,
         "label_strategy": UNCERTAIN_LABEL_STRATEGY,
         "segmentation_checkpoint": effective["segmentation_checkpoint"],
+        "splits_csv": effective["splits_csv"],
+        "image_root": effective["image_root"],
     }
     (directory / "run_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))

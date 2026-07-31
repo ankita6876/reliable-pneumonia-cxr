@@ -72,20 +72,26 @@ def _xrv_normalize(image: torch.Tensor) -> torch.Tensor:
 
 
 def _transforms(
-    image_size: int, preprocessing: str = IMAGENET_PREPROCESSING
+    image_size: int,
+    preprocessing: str = IMAGENET_PREPROCESSING,
+    *,
+    augmentation: str = "historical",
+    horizontal_flip: bool = True,
+    rotation_degrees: int = 7,
 ) -> tuple[transforms.Compose, transforms.Compose]:
     """Return model-configured training and deterministic validation transforms."""
+    if augmentation not in {"none", "historical"}:
+        raise ValueError("augmentation must be none or historical.")
     if preprocessing == IMAGENET_PREPROCESSING:
         normalize = transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
-        train_transform = transforms.Compose(
-            [
-                transforms.Resize((image_size, image_size)),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomRotation(7),
-                transforms.ToTensor(),
-                normalize,
-            ]
-        )
+        train_steps: list[object] = [transforms.Resize((image_size, image_size))]
+        if augmentation == "historical":
+            if horizontal_flip:
+                train_steps.append(transforms.RandomHorizontalFlip())
+            if rotation_degrees > 0:
+                train_steps.append(transforms.RandomRotation(rotation_degrees))
+        train_steps.extend([transforms.ToTensor(), normalize])
+        train_transform = transforms.Compose(train_steps)
         validation_transform = transforms.Compose(
             [
                 transforms.Resize((image_size, image_size)),
@@ -105,15 +111,19 @@ def _transforms(
         transforms.Resize(image_size),
         transforms.CenterCrop(image_size),
     ]
-    train_transform = transforms.Compose(
+    train_steps = [*xrv_base]
+    if augmentation == "historical":
+        if horizontal_flip:
+            train_steps.append(transforms.RandomHorizontalFlip())
+        if rotation_degrees > 0:
+            train_steps.append(transforms.RandomRotation(rotation_degrees))
+    train_steps.extend(
         [
-            *xrv_base,
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(7),
             transforms.ToTensor(),
             transforms.Lambda(_xrv_normalize),
         ]
     )
+    train_transform = transforms.Compose(train_steps)
     validation_transform = transforms.Compose(
         [*xrv_base, transforms.ToTensor(), transforms.Lambda(_xrv_normalize)]
     )

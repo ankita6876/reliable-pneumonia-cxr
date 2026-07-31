@@ -44,7 +44,7 @@ def prepare_classifier_image(
     grayscale = image.convert("L")
     if resolved_mode is InputMode.ORIGINAL:
         return _resize(grayscale, size)
-    if segmenter is None:
+    if segmenter is None and probability_mask is None:
         raise ValueError(f"input mode {resolved_mode.value!r} requires a FrozenLungSegmenter.")
     if not 0.0 < threshold < 1.0:
         raise ValueError("threshold must be strictly between 0 and 1.")

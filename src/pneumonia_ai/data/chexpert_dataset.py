@@ -43,6 +43,7 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         mask_threshold: float = 0.5,
         lung_crop_padding: int = 0,
         classifier_image_size: int | tuple[int, int] | None = None,
+        allow_absolute_image_paths: bool = False,
     ) -> None:
         """Load one manifest split and validate its image references.
 
@@ -109,7 +110,9 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         self._targets = targets.astype("float32").reset_index(drop=True)
         self._sample_loss_weights = weights.astype("float32").reset_index(drop=True)
         self._resolved_image_paths = [
-            _resolve_manifest_image_path(self.dataset_root, image_path)
+            _resolve_manifest_image_path(
+                self.dataset_root, image_path, allow_absolute=allow_absolute_image_paths
+            )
             for image_path in self.records["image_path"]
         ]
         for image_path in self._resolved_image_paths:
@@ -118,7 +121,7 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
                     f"Image file referenced by manifest does not exist: {image_path}"
                 )
         self._returned_image_paths = [
-            image_path.relative_to(self.dataset_root).as_posix()
+            _returned_image_path(image_path, self.dataset_root)
             for image_path in self._resolved_image_paths
         ]
         self.transform = transform
@@ -126,8 +129,10 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             self.input_mode = InputMode(input_mode)
         except ValueError as error:
             raise DatasetValidationError("input_mode must be original, hard_masked, or lung_crop.") from error
-        if self.input_mode is not InputMode.ORIGINAL and lung_segmenter is None:
-            raise DatasetValidationError("hard_masked and lung_crop input modes require lung_segmenter.")
+        if self.input_mode is not InputMode.ORIGINAL and lung_segmenter is None and mask_cache is None:
+            raise DatasetValidationError(
+                "hard_masked and lung_crop input modes require lung_segmenter or mask_cache."
+            )
         self.lung_segmenter = lung_segmenter
         self.mask_cache = mask_cache
         self.mask_threshold = mask_threshold
@@ -150,6 +155,8 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
                 threshold=self.mask_threshold, crop_padding=self.lung_crop_padding,
                 output_size=self.classifier_image_size, probability_mask=probability_mask,
             )
+        if self.input_mode is not InputMode.ORIGINAL:
+            image = image.convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
         return {
@@ -168,9 +175,16 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
     def _probability_mask(self, index: int, image: Image.Image) -> torch.Tensor | None:
         if self.input_mode is InputMode.ORIGINAL:
             return None
-        assert self.lung_segmenter is not None
         if self.mask_cache is None:
+            assert self.lung_segmenter is not None
             return self.lung_segmenter.predict_proba(image)
+        if self.lung_segmenter is None:
+            mask = self.mask_cache.get_for_source(self._resolved_image_paths[index])
+            if mask is None:
+                raise DatasetValidationError(
+                    "Mask cache lacks a valid mask for the requested hard-masked image."
+                )
+            return mask
         key = self.mask_cache.key(
             self._resolved_image_paths[index],
             self.lung_segmenter.checkpoint_path,
@@ -180,12 +194,21 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         mask = self.mask_cache.get(key)
         if mask is None:
             mask = self.lung_segmenter.predict_proba(image)
-            self.mask_cache.set(key, mask)
+            self.mask_cache.set(key, mask, source_path=self._resolved_image_paths[index])
         return mask
 
 
-def _resolve_manifest_image_path(dataset_root: Path, image_path: object) -> Path:
+def _resolve_manifest_image_path(
+    dataset_root: Path, image_path: object, *, allow_absolute: bool = False
+) -> Path:
     """Resolve a portable root-relative manifest path using native filesystem paths."""
+    native_path = Path(str(image_path)).expanduser()
+    if native_path.is_absolute():
+        if allow_absolute:
+            return native_path.resolve()
+        raise DatasetValidationError(
+            "Manifest image_path must be a relative POSIX path: " f"{image_path!r}"
+        )
     manifest_path = PurePosixPath(str(image_path))
     if (
         manifest_path.is_absolute()
@@ -196,3 +219,12 @@ def _resolve_manifest_image_path(dataset_root: Path, image_path: object) -> Path
             "Manifest image_path must be a relative POSIX path: " f"{image_path!r}"
         )
     return dataset_root.joinpath(*manifest_path.parts)
+
+
+def _returned_image_path(image_path: Path, dataset_root: Path) -> str:
+    """Keep portable paths when possible, retaining permitted absolute paths otherwise."""
+
+    try:
+        return image_path.relative_to(dataset_root).as_posix()
+    except ValueError:
+        return str(image_path)

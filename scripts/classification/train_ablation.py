@@ -17,8 +17,18 @@ def parse_args() -> argparse.Namespace:
     """Parse a complete ablation configuration."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-mode", choices=[mode.value for mode in InputMode], required=True)
-    parser.add_argument("--train-csv", type=Path, required=True)
-    parser.add_argument("--validation-csv", type=Path, required=True)
+    parser.add_argument(
+        "--splits-csv",
+        type=Path,
+        required=True,
+        help="Patient-level manifest with train, validation, and test split rows.",
+    )
+    parser.add_argument(
+        "--image-root",
+        type=Path,
+        required=True,
+        help="Directory against which relative image_path values are resolved.",
+    )
     parser.add_argument("--output-directory", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--segmentation-checkpoint", type=Path)
