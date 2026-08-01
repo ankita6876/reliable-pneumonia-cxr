@@ -28,6 +28,7 @@ def build_leaderboard(output_root: Path) -> pd.DataFrame:
                 "status": summary.get("status"),
                 "seed": config.get("seed"), "backbone": config.get("backbone"),
                 "pretrained": config.get("pretrained"), "augmentation": config.get("augmentation"),
+                "input_mode": config.get("input_mode", "hard_masked"),
                 "horizontal_flip": config.get("horizontal_flip", config.get("augmentation") == "historical"),
                 "rotation_degrees": config.get("rotation_degrees", 7), "loss": config.get("loss"),
                 "optimizer": config.get("optimizer", config.get("optimiser")),

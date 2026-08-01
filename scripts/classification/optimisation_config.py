@@ -12,6 +12,7 @@ import yaml
 @dataclass(frozen=True)
 class OptimisationConfig:
     experiment: str
+    input_mode: str = "hard_masked"
     seed: int = 42
     backbone: str = "densenet121"
     pretrained: bool = False
@@ -69,6 +70,8 @@ def load_config(path: Path) -> OptimisationConfig:
         config = OptimisationConfig(**config_values)
     if config.augmentation not in {"none", "historical"}:
         raise ValueError("augmentation must be none or historical.")
+    if config.input_mode not in {"original", "hard_masked"}:
+        raise ValueError("input_mode must be original or hard_masked.")
     if config.rotation_degrees < 0:
         raise ValueError("rotation_degrees must be non-negative.")
     if config.augmentation == "none" and (config.horizontal_flip or config.rotation_degrees):
@@ -99,6 +102,14 @@ def validate_controlled_a_series(config_directory: Path) -> None:
         actual = configuration_differences(first, second)
         if actual != allowed:
             raise ValueError(f"Controlled configuration violation for {label}: unexpected differences={sorted(actual - allowed)}; missing required differences={sorted(allowed - actual)}.")
+    original = config_directory / "A4_original_control.yaml"
+    if original.is_file():
+        control = load_config(original)
+        actual = configuration_differences(configs[4], control)
+        if actual != {"input_mode"}:
+            raise ValueError("Controlled configuration violation for A4 vs A4_original_control: "
+                             f"unexpected differences={sorted(actual - {'input_mode'})}; "
+                             f"missing required differences={sorted({'input_mode'} - actual)}.")
 
 
 def serialise_config(

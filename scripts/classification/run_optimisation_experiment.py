@@ -148,7 +148,7 @@ def _development_datasets(
     segmenter: FrozenLungSegmenter | None,
     mask_cache: MaskCache | None,
 ) -> tuple[CheXpertPneumoniaDataset, CheXpertPneumoniaDataset]:
-    """Create hard-masked development datasets without materialising test rows."""
+    """Create development datasets without materialising test rows."""
     with splits_csv.open(newline="", encoding="utf-8") as manifest_file:
         reader = csv.DictReader(manifest_file)
         if reader.fieldnames is None or "split" not in reader.fieldnames:
@@ -172,13 +172,15 @@ def _development_datasets(
     return (
         CheXpertPneumoniaDataset(
             image_root, path, "train", train_tf,
-            input_mode=InputMode.HARD_MASKED, lung_segmenter=segmenter,
-            mask_cache=mask_cache, classifier_image_size=config.input_size,
+            input_mode=InputMode(config.input_mode), lung_segmenter=segmenter,
+            mask_cache=mask_cache,
+            classifier_image_size=config.input_size if config.input_mode == "hard_masked" else None,
         ),
         CheXpertPneumoniaDataset(
             image_root, path, "validation", validation_tf,
-            input_mode=InputMode.HARD_MASKED, lung_segmenter=segmenter,
-            mask_cache=mask_cache, classifier_image_size=config.input_size,
+            input_mode=InputMode(config.input_mode), lung_segmenter=segmenter,
+            mask_cache=mask_cache,
+            classifier_image_size=config.input_size if config.input_mode == "hard_masked" else None,
         ),
     )
 
@@ -327,23 +329,28 @@ def _preflight(
     device_name: str,
 ) -> None:
     """Validate every dependency without creating an experiment output directory."""
-    if device_name != "cpu":
-        raise ValueError(
-            "This focused optimisation runner currently supports --device cpu only."
-        )
+    if device_name not in {"cpu", "cuda"}:
+        raise ValueError("device must be cpu or cuda.")
+    if device_name == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("--device cuda was requested but CUDA is unavailable.")
     if not splits_csv.is_file():
         raise FileNotFoundError(f"Split manifest does not exist: {splits_csv}")
     if not image_root.is_dir():
         raise NotADirectoryError(f"Image root does not exist: {image_root}")
     validate_development_manifest(splits_csv)
-    segmenter, mask_cache = _masking_dependencies(
-        segmentation_checkpoint, mask_cache_path, device_name, create_cache=False
-    )
+    if config.input_mode == "hard_masked":
+        segmenter, mask_cache = _masking_dependencies(
+            segmentation_checkpoint, mask_cache_path, device_name, create_cache=False
+        )
+    else:
+        if segmentation_checkpoint is not None or mask_cache_path is not None:
+            # Inputs are deliberately ignored: original mode must not read segmentation state.
+            segmenter, mask_cache = None, None
     with tempfile.TemporaryDirectory() as temporary:
         train_set, validation_set = _development_datasets(
             config, splits_csv, image_root, Path(temporary), segmenter, mask_cache
         )
-        if segmenter is None:
+        if config.input_mode == "hard_masked" and segmenter is None:
             assert mask_cache is not None
             mask_cache.require_coverage(
                 [*train_set._resolved_image_paths, *validation_set._resolved_image_paths]
@@ -431,12 +438,16 @@ def _run_experiment_after_preflight(
     output = output_root / config.experiment
     seed_everything(config.seed)
     device = torch.device(device_name)
-    segmenter, mask_cache = _masking_dependencies(
-        segmentation_checkpoint,
-        mask_cache_path or output / "mask_cache",
-        device_name,
-        create_cache=True,
-    )
+    if config.input_mode == "hard_masked":
+        segmenter, mask_cache = _masking_dependencies(
+            segmentation_checkpoint,
+            mask_cache_path or output / "mask_cache",
+            device_name,
+            create_cache=True,
+        )
+    else:
+        # Original-image control has no segmentation or cache dependency by design.
+        segmenter, mask_cache = None, None
     if segmenter is not None and mask_cache is not None:
         mask_cache.validate_or_initialise_metadata(_cache_metadata(segmenter, image_root))
         print(f"Using compatible shared mask cache: {mask_cache.directory}", flush=True)
@@ -616,6 +627,7 @@ def _run_experiment_after_preflight(
     summary = {
         "status": "completed",
         "experiment": config.experiment,
+        "input_mode": config.input_mode,
         "epochs_completed": len(history_frame),
         "best_epoch": best_epoch,
         "early_stopped": early_stopped,
@@ -647,7 +659,7 @@ def run_experiment(
 ) -> Path:
     """Preflight first, then execute with safe restart and failure-state handling."""
     shared_cache = output_root / "shared_mask_cache"
-    effective_mask_cache = mask_cache_path or shared_cache
+    effective_mask_cache = (mask_cache_path or shared_cache) if config.input_mode == "hard_masked" else None
     # A missing shared cache is expected on the first run; segmentation will populate it.
     preflight_cache = effective_mask_cache if effective_mask_cache.is_dir() else None
     _preflight(
@@ -663,9 +675,11 @@ def run_experiment(
     run_metadata = {
         "transform": resolved_transform_metadata(config),
         "dataset_split_path": str(splits_csv.resolve()), "image_root": str(image_root.resolve()),
-        "segmentation_checkpoint": str(segmentation_checkpoint.resolve()) if segmentation_checkpoint else None,
-        "segmentation_checkpoint_sha256": _file_sha256(segmentation_checkpoint) if segmentation_checkpoint else None,
-        "mask_cache": str(effective_mask_cache.resolve()), "torch_version": torch.__version__,
+        "label_policy": "ignore",
+        "input_mode": config.input_mode,
+        "segmentation_checkpoint": str(segmentation_checkpoint.resolve()) if config.input_mode == "hard_masked" and segmentation_checkpoint else None,
+        "segmentation_checkpoint_sha256": _file_sha256(segmentation_checkpoint) if config.input_mode == "hard_masked" and segmentation_checkpoint else None,
+        "mask_cache": str(effective_mask_cache.resolve()) if effective_mask_cache else None, "torch_version": torch.__version__,
         "device": device_name, "start_time": datetime.now(timezone.utc).isoformat(),
         "git_commit": _git_commit(),
     }

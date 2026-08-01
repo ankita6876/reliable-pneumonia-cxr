@@ -43,6 +43,21 @@ def test_a_series_has_only_the_intended_resolved_differences() -> None:
     validate_controlled_a_series(root)
 
 
+def test_a4_original_control_differs_only_by_input_mode() -> None:
+    root = Path(__file__).resolve().parents[1] / "configs" / "classification_optimisation"
+    hard, original = load_config(root / "A4_pretrained_progressive.yaml"), load_config(root / "A4_original_control.yaml")
+    assert configuration_differences(hard, original) == {"input_mode"}
+
+
+def test_a4_original_control_transform_is_identical_to_a4() -> None:
+    root = Path(__file__).resolve().parents[1] / "configs" / "classification_optimisation"
+    hard, original = load_config(root / "A4_pretrained_progressive.yaml"), load_config(root / "A4_original_control.yaml")
+    image = Image.new("RGB", (240, 200), color=128)
+    hard_train, hard_validation = build_transforms(hard); original_train, original_validation = build_transforms(original)
+    assert [type(x) for x in hard_train.transforms] == [type(x) for x in original_train.transforms]
+    torch.testing.assert_close(hard_validation(image), original_validation(image), rtol=0, atol=0)
+
+
 def test_augmentation_configuration_controls_horizontal_flip() -> None:
     historical, validation = build_transforms(OptimisationConfig(experiment="a"))
     no_flip, _ = build_transforms(OptimisationConfig(experiment="b", horizontal_flip=False))
@@ -277,6 +292,17 @@ def test_preflight_rejects_missing_mask_cache_and_segmentation_checkpoint(
             output_root=tmp_path / "out",
         )
     assert not (tmp_path / "out" / "missing_masking_input").exists()
+
+
+def test_original_mode_needs_no_segmentation_or_mask_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import scripts.classification.run_optimisation_experiment as runner
+    image_root = tmp_path / "images"; image_root.mkdir()
+    Image.new("RGB", (12, 12)).save(image_root / "train.png"); Image.new("RGB", (12, 12)).save(image_root / "validation.png")
+    manifest = tmp_path / "splits.csv"
+    manifest.write_text("split,patient_id,study_id,image_path,pneumonia_label\ntrain,p1,s1,train.png,1\nvalidation,p2,s2,validation.png,0\n")
+    monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: nn.Identity())
+    runner._preflight(OptimisationConfig(experiment="original", input_mode="original"), manifest, image_root, None, None, "cpu")
+    assert not (tmp_path / "shared_mask_cache").exists()
 
 
 def test_incomplete_empty_directory_is_reused_automatically(tmp_path: Path) -> None:
