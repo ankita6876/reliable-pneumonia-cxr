@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -303,6 +304,111 @@ def test_original_mode_needs_no_segmentation_or_mask_cache(tmp_path: Path, monke
     monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: nn.Identity())
     runner._preflight(OptimisationConfig(experiment="original", input_mode="original"), manifest, image_root, None, None, "cpu")
     assert not (tmp_path / "shared_mask_cache").exists()
+
+
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+def test_parser_accepts_supported_devices(
+    monkeypatch: pytest.MonkeyPatch, device: str
+) -> None:
+    import scripts.classification.run_optimisation_experiment as runner
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_optimisation_experiment.py", "--config", "config.yaml",
+            "--splits-csv", "splits.csv", "--image-root", "images",
+            "--device", device,
+        ],
+    )
+    assert runner.parse_args().device == device
+
+
+def test_preflight_rejects_unavailable_cuda_with_clear_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import scripts.classification.run_optimisation_experiment as runner
+
+    monkeypatch.setattr(runner.torch.cuda, "is_available", lambda: False)
+    with pytest.raises(
+        RuntimeError,
+        match=r"CUDA was requested but torch.cuda\.is_available\(\) is False",
+    ):
+        runner._preflight(
+            OptimisationConfig(experiment="cuda_preflight", input_mode="original"),
+            tmp_path / "missing.csv", tmp_path, None, None, "cuda",
+        )
+
+
+def test_hard_masked_segmenter_receives_requested_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import scripts.classification.run_optimisation_experiment as runner
+
+    checkpoint = tmp_path / "segmenter.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    received: list[object] = []
+
+    class Segmenter:
+        def __init__(self, path: Path, device: str) -> None:
+            received.extend((path, device))
+
+    monkeypatch.setattr(runner, "FrozenLungSegmenter", Segmenter)
+    segmenter, cache = runner._masking_dependencies(
+        checkpoint, None, "cuda", create_cache=False
+    )
+    assert isinstance(segmenter, Segmenter)
+    assert cache is None
+    assert received == [checkpoint, "cuda"]
+
+
+def test_original_run_passes_requested_device_to_classifier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import scripts.classification.run_optimisation_experiment as runner
+
+    class TinyDataset(torch.utils.data.Dataset):
+        _targets = np.array([0.0, 1.0])
+
+        def __len__(self) -> int:
+            return 2
+
+        def __getitem__(self, index: int) -> dict[str, object]:
+            return {
+                "image": torch.tensor([[[float(index)]]]),
+                "target": torch.tensor(float(index)),
+                "patient_id": f"p{index}", "study_id": f"s{index}",
+                "image_path": f"image{index}.png",
+            }
+
+    class TrackingModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.classifier = nn.Linear(1, 1)
+            self.devices: list[torch.device] = []
+
+        def to(self, device: object, *args: object, **kwargs: object) -> "TrackingModel":
+            self.devices.append(torch.device(device))
+            return super().to(device, *args, **kwargs)
+
+        def forward(self, image: torch.Tensor) -> torch.Tensor:
+            return self.classifier(image.flatten(1))
+
+    model = TrackingModel()
+    datasets = (TinyDataset(), TinyDataset())
+    monkeypatch.setattr(runner, "_development_datasets", lambda *args: datasets)
+    monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: model)
+    monkeypatch.setattr(runner, "_plot", lambda *args: None)
+    (tmp_path / "device_propagation").mkdir()
+    config = OptimisationConfig(
+        experiment="device_propagation", input_mode="original", loss="bce",
+        scheduler="none", epochs=1, batch_size=2, augmentation="none",
+        horizontal_flip=False, rotation_degrees=0,
+    )
+    runner._run_experiment_after_preflight(
+        config, tmp_path / "splits.csv", tmp_path, None, None, tmp_path, "cpu"
+    )
+    assert model.devices == [torch.device("cpu")]
 
 
 def test_incomplete_empty_directory_is_reused_automatically(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""Optimise a classifier on development-only dynamically hard-masked inputs."""
+"""Optimise a classifier on development-only original or dynamically hard-masked inputs."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ def parse_args() -> argparse.Namespace:
         help="Optional complete indexed cache of hard-mask probabilities.",
     )
     parser.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
-    parser.add_argument("--device", default="cpu", choices=("cpu",))
+    parser.add_argument("--device", default="cpu", choices=("cpu", "cuda"))
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -332,7 +332,9 @@ def _preflight(
     if device_name not in {"cpu", "cuda"}:
         raise ValueError("device must be cpu or cuda.")
     if device_name == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("--device cuda was requested but CUDA is unavailable.")
+        raise RuntimeError(
+            "CUDA was requested but torch.cuda.is_available() is False."
+        )
     if not splits_csv.is_file():
         raise FileNotFoundError(f"Split manifest does not exist: {splits_csv}")
     if not image_root.is_dir():
@@ -494,7 +496,7 @@ def _run_experiment_after_preflight(
         calculate_pos_weight(
             train_set._targets, config.loss in {"weighted_bce", "focal"}
         ),
-    )
+    ).to(device)
     start, best, best_epoch, history = 1, -np.inf, 0, []
     last = output / "last_checkpoint.pt"
     best_path = output / "best_checkpoint.pt"
