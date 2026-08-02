@@ -48,6 +48,9 @@ def test_a4_original_control_differs_only_by_input_mode() -> None:
     root = Path(__file__).resolve().parents[1] / "configs" / "classification_optimisation"
     hard, original = load_config(root / "A4_pretrained_progressive.yaml"), load_config(root / "A4_original_control.yaml")
     assert configuration_differences(hard, original) == {"input_mode"}
+    assert {
+        key for key in hard.to_dict() if hard.to_dict()[key] != original.to_dict()[key]
+    } == {"experiment", "input_mode"}
 
 
 def test_a4_original_control_transform_is_identical_to_a4() -> None:
@@ -302,7 +305,27 @@ def test_original_mode_needs_no_segmentation_or_mask_cache(tmp_path: Path, monke
     manifest = tmp_path / "splits.csv"
     manifest.write_text("split,patient_id,study_id,image_path,pneumonia_label\ntrain,p1,s1,train.png,1\nvalidation,p2,s2,validation.png,0\n")
     monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: nn.Identity())
-    runner._preflight(OptimisationConfig(experiment="original", input_mode="original"), manifest, image_root, None, None, "cpu")
+    train_set, validation_set = runner._development_datasets(
+        OptimisationConfig(experiment="original", input_mode="original"),
+        manifest, image_root, tmp_path, None, None,
+    )
+    assert train_set.input_mode.value == "original"
+    assert validation_set.input_mode.value == "original"
+    assert train_set.lung_segmenter is None and validation_set.lung_segmenter is None
+    assert train_set.mask_cache is None and validation_set.mask_cache is None
+    monkeypatch.setattr(
+        runner,
+        "_masking_dependencies",
+        lambda *args, **kwargs: pytest.fail("original mode must not resolve masking dependencies"),
+    )
+    runner._preflight(
+        OptimisationConfig(experiment="original", input_mode="original"),
+        manifest,
+        image_root,
+        tmp_path / "unused-segmenter.pt",
+        tmp_path / "unused-cache",
+        "cpu",
+    )
     assert not (tmp_path / "shared_mask_cache").exists()
 
 
@@ -328,12 +351,10 @@ def test_original_run_reaches_training_setup_without_masking_dependencies(
         encoding="utf-8",
     )
     output_root = tmp_path / "out"
-    received: dict[str, object] = {}
+    received: list[tuple[object, object, object]] = []
 
     def training_setup(*args: object, **kwargs: object) -> Path:
-        received["segmentation_checkpoint"] = args[3]
-        received["mask_cache"] = args[4]
-        received["device"] = args[6]
+        received.append((args[3], args[4], args[6]))
         return output_root / "original_run"
 
     monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: nn.Identity())
@@ -346,11 +367,17 @@ def test_original_run_reaches_training_setup_without_masking_dependencies(
         manifest, image_root, output_root=output_root, device_name=device,
     )
 
-    assert received == {
-        "segmentation_checkpoint": None,
-        "mask_cache": None,
-        "device": device,
-    }
+    output = output_root / "original_run"
+    (output / "last_checkpoint.pt").write_bytes(b"interrupted")
+    runner.run_experiment(
+        OptimisationConfig(experiment="original_run", input_mode="original"),
+        manifest, image_root, output_root=output_root, device_name=device, resume=True,
+    )
+    runner.run_experiment(
+        OptimisationConfig(experiment="original_run", input_mode="original"),
+        manifest, image_root, output_root=output_root, device_name=device, restart=True,
+    )
+    assert received == [(None, None, device)] * 3
     assert not (output_root / "shared_mask_cache").exists()
 
 
@@ -415,24 +442,10 @@ def test_original_run_passes_requested_device_to_classifier(
 ) -> None:
     import scripts.classification.run_optimisation_experiment as runner
 
-    class TinyDataset(torch.utils.data.Dataset):
-        _targets = np.array([0.0, 1.0])
-
-        def __len__(self) -> int:
-            return 2
-
-        def __getitem__(self, index: int) -> dict[str, object]:
-            return {
-                "image": torch.tensor([[[float(index)]]]),
-                "target": torch.tensor(float(index)),
-                "patient_id": f"p{index}", "study_id": f"s{index}",
-                "image_path": f"image{index}.png",
-            }
-
     class TrackingModel(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.classifier = nn.Linear(1, 1)
+            self.classifier = nn.Linear(3 * 224 * 224, 1)
             self.devices: list[torch.device] = []
 
         def to(self, device: object, *args: object, **kwargs: object) -> "TrackingModel":
@@ -443,20 +456,38 @@ def test_original_run_passes_requested_device_to_classifier(
             return self.classifier(image.flatten(1))
 
     model = TrackingModel()
-    datasets = (TinyDataset(), TinyDataset())
-    monkeypatch.setattr(runner, "_development_datasets", lambda *args: datasets)
     monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: model)
     monkeypatch.setattr(runner, "_plot", lambda *args: None)
-    (tmp_path / "device_propagation").mkdir()
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    for name, colour in (("train0.png", 32), ("train1.png", 224), ("validation0.png", 64), ("validation1.png", 192)):
+        Image.new("RGB", (12, 12), color=colour).save(image_root / name)
+    manifest = tmp_path / "splits.csv"
+    manifest.write_text(
+        "split,patient_id,study_id,image_path,pneumonia_label\n"
+        "train,p1,s1,train0.png,0\n"
+        "train,p2,s2,train1.png,1\n"
+        "validation,p3,s3,validation0.png,0\n"
+        "validation,p4,s4,validation1.png,1\n",
+        encoding="utf-8",
+    )
     config = OptimisationConfig(
         experiment="device_propagation", input_mode="original", loss="bce",
         scheduler="none", epochs=1, batch_size=2, augmentation="none",
         horizontal_flip=False, rotation_degrees=0,
     )
-    runner._run_experiment_after_preflight(
-        config, tmp_path / "splits.csv", tmp_path, None, None, tmp_path, "cpu"
+    output = runner.run_experiment(
+        config, manifest, image_root, output_root=tmp_path, device_name="cpu"
     )
     assert model.devices == [torch.device("cpu")]
+    metadata = json.loads((output / "config.json").read_text(encoding="utf-8"))
+    assert metadata["input_mode"] == "original"
+    assert metadata["segmentation_checkpoint"] is None
+    assert metadata["segmentation_checkpoint_sha256"] is None
+    assert metadata["mask_cache"] is None
+    checkpoint = torch.load(output / "best_checkpoint.pt", weights_only=False)
+    assert checkpoint["configuration"]["input_mode"] == "original"
+    assert not (tmp_path / "shared_mask_cache").exists()
 
 
 def test_incomplete_empty_directory_is_reused_automatically(tmp_path: Path) -> None:

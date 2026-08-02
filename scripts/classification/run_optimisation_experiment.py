@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import dataclass
 import hashlib
 import json
 import logging
@@ -320,6 +321,37 @@ def _masking_dependencies(
     return None, MaskCache(mask_cache_path, create=create_cache)
 
 
+@dataclass(frozen=True)
+class InputDependencies:
+    """Optional masking services resolved explicitly for the selected input mode."""
+
+    segmenter: FrozenLungSegmenter | None = None
+    mask_cache: MaskCache | None = None
+
+
+def _resolve_input_dependencies(
+    config: OptimisationConfig,
+    segmentation_checkpoint: Path | None,
+    mask_cache_path: Path | None,
+    device_name: str,
+    *,
+    create_cache: bool,
+) -> InputDependencies:
+    """Resolve masking services only for hard-masked experiments.
+
+    Original-image experiments deliberately ignore all segmentation arguments so
+    their complete training path has no cache or segmentation dependency.
+    """
+    if config.input_mode == InputMode.ORIGINAL.value:
+        return InputDependencies()
+    if config.input_mode != InputMode.HARD_MASKED.value:
+        raise ValueError("input_mode must be original or hard_masked.")
+    segmenter, mask_cache = _masking_dependencies(
+        segmentation_checkpoint, mask_cache_path, device_name, create_cache=create_cache
+    )
+    return InputDependencies(segmenter, mask_cache)
+
+
 def _preflight(
     config: OptimisationConfig,
     splits_csv: Path,
@@ -340,21 +372,21 @@ def _preflight(
     if not image_root.is_dir():
         raise NotADirectoryError(f"Image root does not exist: {image_root}")
     validate_development_manifest(splits_csv)
-    if config.input_mode == "hard_masked":
-        segmenter, mask_cache = _masking_dependencies(
-            segmentation_checkpoint, mask_cache_path, device_name, create_cache=False
-        )
-    else:
-        if segmentation_checkpoint is not None or mask_cache_path is not None:
-            # Inputs are deliberately ignored: original mode must not read segmentation state.
-            segmenter, mask_cache = None, None
+    dependencies = _resolve_input_dependencies(
+        config, segmentation_checkpoint, mask_cache_path, device_name, create_cache=False
+    )
     with tempfile.TemporaryDirectory() as temporary:
         train_set, validation_set = _development_datasets(
-            config, splits_csv, image_root, Path(temporary), segmenter, mask_cache
+            config,
+            splits_csv,
+            image_root,
+            Path(temporary),
+            dependencies.segmenter,
+            dependencies.mask_cache,
         )
-        if config.input_mode == "hard_masked" and segmenter is None:
-            assert mask_cache is not None
-            mask_cache.require_coverage(
+        if config.input_mode == InputMode.HARD_MASKED.value and dependencies.segmenter is None:
+            assert dependencies.mask_cache is not None
+            dependencies.mask_cache.require_coverage(
                 [*train_set._resolved_image_paths, *validation_set._resolved_image_paths]
             )
     try:
@@ -440,16 +472,19 @@ def _run_experiment_after_preflight(
     output = output_root / config.experiment
     seed_everything(config.seed)
     device = torch.device(device_name)
-    if config.input_mode == "hard_masked":
-        segmenter, mask_cache = _masking_dependencies(
-            segmentation_checkpoint,
-            mask_cache_path or output / "mask_cache",
-            device_name,
-            create_cache=True,
-        )
-    else:
-        # Original-image control has no segmentation or cache dependency by design.
-        segmenter, mask_cache = None, None
+    runtime_mask_cache = (
+        mask_cache_path or output / "mask_cache"
+        if config.input_mode == InputMode.HARD_MASKED.value
+        else None
+    )
+    dependencies = _resolve_input_dependencies(
+        config,
+        segmentation_checkpoint,
+        runtime_mask_cache,
+        device_name,
+        create_cache=True,
+    )
+    segmenter, mask_cache = dependencies.segmenter, dependencies.mask_cache
     if segmenter is not None and mask_cache is not None:
         mask_cache.validate_or_initialise_metadata(_cache_metadata(segmenter, image_root))
         print(f"Using compatible shared mask cache: {mask_cache.directory}", flush=True)
@@ -660,8 +695,10 @@ def run_experiment(
     force: bool = False,
 ) -> Path:
     """Preflight first, then execute with safe restart and failure-state handling."""
-    shared_cache = output_root / "shared_mask_cache"
-    effective_mask_cache = (mask_cache_path or shared_cache) if config.input_mode == "hard_masked" else None
+    effective_mask_cache: Path | None = None
+    if config.input_mode == InputMode.HARD_MASKED.value:
+        shared_cache = output_root / "shared_mask_cache"
+        effective_mask_cache = mask_cache_path or shared_cache
     # A missing shared cache is expected on the first run; segmentation will populate it.
     preflight_cache = (
         effective_mask_cache
@@ -673,9 +710,11 @@ def run_experiment(
         device_name,
     )
     output = output_root / config.experiment
-    _prepare_run_directory(output, resume=resume, restart=restart, force=force)
     logger = logging.getLogger(config.experiment)
-    logger.handlers.clear()
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        handler.close()
+    _prepare_run_directory(output, resume=resume, restart=restart, force=force)
     logger.addHandler(logging.FileHandler(output / "training.log", encoding="utf-8"))
     logger.setLevel(logging.INFO)
     run_metadata = {
