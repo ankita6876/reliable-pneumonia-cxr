@@ -16,7 +16,7 @@ from pneumonia_ai.classification.segmentation_guided import InputMode, prepare_c
 from pneumonia_ai.models.factory import create_model
 from pneumonia_ai.segmentation.cache import MaskCache
 from pneumonia_ai.segmentation.inference import FrozenLungSegmenter
-from scripts.classification.checkpoint_compatibility import load_adjacent_experiment_configuration, normalize_checkpoint_configuration
+from scripts.classification.checkpoint_compatibility import (classify_checkpoint_configuration, load_adjacent_experiment_configuration, normalize_checkpoint_configuration, normalize_nested_original_baseline_configuration)
 from scripts.train_baseline import _transforms
 from scripts.analysis.segmentation_quality_features import QUALITY_FEATURE_COLUMNS, segmentation_quality_features
 
@@ -56,13 +56,14 @@ def preflight(args: argparse.Namespace) -> pd.DataFrame:
 def _checkpoint(path: Path) -> tuple[dict[str,Any],dict[str,Any],torch.nn.Module]:
  state=torch.load(path,map_location="cpu",weights_only=False); raw=state.get("configuration", state.get("config",{}))
  if not isinstance(raw,Mapping): raise ValueError(f"Checkpoint lacks a configuration: {path}")
- # ablation checkpoints have a compact top-level config; baseline configurations are nested.
  adjacent=load_adjacent_experiment_configuration(path)
- if "input_mode" in raw:
+ schema=classify_checkpoint_configuration(raw)
+ if schema in {"optimisation","legacy_optimisation"}:
+  if schema == "legacy_optimisation": raw={**raw,"input_mode":InputMode.HARD_MASKED.value}
   config=normalize_checkpoint_configuration(raw,adjacent)
   if adjacent: config.update({k:v for k,v in adjacent.items() if k not in config or k in {"dataset_split_path","label_policy"}})
  else:
-  model_cfg=raw.get("model",{}) if isinstance(raw.get("model"),Mapping) else {}; config={"input_mode":"original","classifier_image_size":int(model_cfg.get("image_size",224)),"mask_threshold":.5,"lung_crop_padding":0,"preprocessing":model_cfg.get("preprocessing","imagenet"),"backbone":model_cfg.get("name","densenet121")}
+  config=normalize_nested_original_baseline_configuration(raw)
  config.setdefault("backbone","densenet121"); model=create_model(str(config["backbone"]),pretrained=False)
  key="model_state_dict" if "model_state_dict" in state else "model_state"
  if key not in state: raise ValueError(f"Checkpoint lacks model weights: {path}")

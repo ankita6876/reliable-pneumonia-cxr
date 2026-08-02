@@ -16,6 +16,13 @@ _LEGACY_EVALUATOR_DEFAULTS: dict[str, object] = {
     "lung_crop_padding": 0,
 }
 
+# These fields are written by the optimisation runner.  A legacy A4 checkpoint
+# predates ``input_mode``, but its training configuration is otherwise intact.
+_OPTIMISATION_SCHEMA_MARKERS = frozenset({
+    "experiment", "backbone", "pretrained", "input_size", "loss", "optimizer",
+})
+_NESTED_ORIGINAL_MODEL_MARKERS = frozenset({"name", "image_size", "preprocessing"})
+
 
 def load_adjacent_experiment_configuration(checkpoint: Path) -> Mapping[str, Any] | None:
     """Load the run's config.json when it is co-located with its checkpoint."""
@@ -35,6 +42,52 @@ def load_adjacent_experiment_configuration(checkpoint: Path) -> Mapping[str, Any
             f"{path}"
         )
     return configuration
+
+
+def classify_checkpoint_configuration(configuration: Mapping[str, Any]) -> str:
+    """Classify a supported embedded checkpoint-configuration schema.
+
+    Explicit ``input_mode`` is authoritative for modern optimisation checkpoints.
+    Earlier optimisation checkpoints are identified by their independent training
+    metadata, while old baseline checkpoints have a nested model configuration.
+    Unknown schemas must not be guessed to be original-image checkpoints.
+    """
+    if "input_mode" in configuration:
+        return "optimisation"
+    present_optimisation_markers = _OPTIMISATION_SCHEMA_MARKERS.intersection(configuration)
+    if len(present_optimisation_markers) >= 3 and {
+        "loss", "optimizer"
+    }.intersection(present_optimisation_markers):
+        return "legacy_optimisation"
+    model = configuration.get("model")
+    if isinstance(model, Mapping) and _NESTED_ORIGINAL_MODEL_MARKERS.intersection(model):
+        return "nested_original_baseline"
+    keys = ", ".join(sorted(map(str, configuration))) or "(none)"
+    model_keys = (
+        "; nested model keys: " + ", ".join(sorted(map(str, model)))
+        if isinstance(model, Mapping) else ""
+    )
+    raise ValueError(
+        "Ambiguous checkpoint configuration schema; cannot infer input treatment. "
+        f"Detected keys: {keys}{model_keys}."
+    )
+
+
+def normalize_nested_original_baseline_configuration(
+    configuration: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Adapt the known nested original-image baseline schema for evaluation."""
+    model = configuration.get("model")
+    if not isinstance(model, Mapping):
+        raise ValueError("Nested original baseline checkpoint lacks a model mapping.")
+    return {
+        "input_mode": InputMode.ORIGINAL.value,
+        "classifier_image_size": int(model.get("image_size", 224)),
+        "mask_threshold": 0.5,
+        "lung_crop_padding": 0,
+        "preprocessing": model.get("preprocessing", "imagenet"),
+        "backbone": model.get("name", "densenet121"),
+    }
 
 
 def normalize_checkpoint_configuration(
