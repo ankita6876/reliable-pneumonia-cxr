@@ -306,6 +306,54 @@ def test_original_mode_needs_no_segmentation_or_mask_cache(tmp_path: Path, monke
     assert not (tmp_path / "shared_mask_cache").exists()
 
 
+@pytest.mark.parametrize(("device", "cuda_available"), (("cpu", False), ("cuda", True)))
+def test_original_run_reaches_training_setup_without_masking_dependencies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    device: str,
+    cuda_available: bool,
+) -> None:
+    """Original-image runs must not touch cache or segmentation state on either device."""
+    import scripts.classification.run_optimisation_experiment as runner
+
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    Image.new("RGB", (12, 12)).save(image_root / "train.png")
+    Image.new("RGB", (12, 12)).save(image_root / "validation.png")
+    manifest = tmp_path / "splits.csv"
+    manifest.write_text(
+        "split,patient_id,study_id,image_path,pneumonia_label\n"
+        "train,p1,s1,train.png,1\n"
+        "validation,p2,s2,validation.png,0\n",
+        encoding="utf-8",
+    )
+    output_root = tmp_path / "out"
+    received: dict[str, object] = {}
+
+    def training_setup(*args: object, **kwargs: object) -> Path:
+        received["segmentation_checkpoint"] = args[3]
+        received["mask_cache"] = args[4]
+        received["device"] = args[6]
+        return output_root / "original_run"
+
+    monkeypatch.setattr(runner, "create_model", lambda *args, **kwargs: nn.Identity())
+    monkeypatch.setattr(runner.torch.cuda, "is_available", lambda: cuda_available)
+    monkeypatch.setattr(runner, "_masking_dependencies", lambda *args, **kwargs: pytest.fail("original mode must not initialise masking dependencies"))
+    monkeypatch.setattr(runner, "_run_experiment_after_preflight", training_setup)
+
+    runner.run_experiment(
+        OptimisationConfig(experiment="original_run", input_mode="original"),
+        manifest, image_root, output_root=output_root, device_name=device,
+    )
+
+    assert received == {
+        "segmentation_checkpoint": None,
+        "mask_cache": None,
+        "device": device,
+    }
+    assert not (output_root / "shared_mask_cache").exists()
+
+
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
 def test_parser_accepts_supported_devices(
     monkeypatch: pytest.MonkeyPatch, device: str

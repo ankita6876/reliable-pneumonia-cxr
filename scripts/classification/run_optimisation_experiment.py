@@ -663,7 +663,11 @@ def run_experiment(
     shared_cache = output_root / "shared_mask_cache"
     effective_mask_cache = (mask_cache_path or shared_cache) if config.input_mode == "hard_masked" else None
     # A missing shared cache is expected on the first run; segmentation will populate it.
-    preflight_cache = effective_mask_cache if effective_mask_cache.is_dir() else None
+    preflight_cache = (
+        effective_mask_cache
+        if effective_mask_cache is not None and effective_mask_cache.is_dir()
+        else None
+    )
     _preflight(
         config, splits_csv, image_root, segmentation_checkpoint, preflight_cache,
         device_name,
