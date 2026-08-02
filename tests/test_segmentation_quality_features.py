@@ -123,3 +123,66 @@ def test_explicit_conflicting_label_policy_fails(tmp_path):
     manifest=_manifest(tmp_path)
     with pytest.raises(ValueError,match="label_policy"):
         validate_methodological_comparability({"input_mode":"hard_masked"},{"input_mode":"original","label_policy":"u_zero"},supplied_splits_csv=manifest)
+
+
+def _criterion_rows():
+    columns=__import__("scripts.analysis.segmentation_quality_features",fromlist=["QUALITY_FEATURE_COLUMNS"]).QUALITY_FEATURE_COLUMNS
+    rows=[]
+    for split in ("train","validation"):
+        for i in range(8):
+            helped=i%2==1
+            rows.append({"split":split,"hard_masked_correct":helped,"original_correct":False,"masked_helped":helped,**{key:float(i) for key in columns}})
+    return pd.DataFrame(rows)
+
+
+def test_masked_helped_target_is_binary_and_normalizes_boolean_object_values():
+    target=reliability_audit.normalize_masked_helped_target(pd.Series([True,False,"true","false",1,0,None]))
+    assert target.dropna().tolist()==[1,0,1,0,1,0]
+
+
+def test_continuous_masked_helped_values_are_rejected():
+    with pytest.raises(ValueError,match="continuous"):
+        reliability_audit.normalize_masked_helped_target(pd.Series([0.25]))
+
+
+def test_criterion4_uses_binary_target_and_handles_single_class():
+    rows=_criterion_rows(); success,_,metadata=reliability_audit._criterion4(rows)
+    assert metadata["criterion4_status"]=="evaluated" and isinstance(success,bool)
+    rows.loc[0,"hard_masked_correct"]=np.nan
+    _,_,metadata=reliability_audit._criterion4(rows)
+    assert metadata["criterion4_training_count"]==7
+    rows=_criterion_rows(); rows.loc[rows.split.eq("validation"),"hard_masked_correct"]=True
+    success,info,metadata=reliability_audit._criterion4(rows)
+    assert not success and "AUROC is undefined" in info["reason"]
+    rows=_criterion_rows()
+    rows["masked_helped"]=True; rows["hard_masked_correct"]=True
+    success,info,metadata=reliability_audit._criterion4(rows)
+    assert not success and info["status"]=="not_evaluable" and "single class" in metadata["criterion4_reason"]
+
+
+def test_criterion4_imputes_from_training_data_only(monkeypatch):
+    rows=_criterion_rows(); columns=__import__("scripts.analysis.segmentation_quality_features",fromlist=["QUALITY_FEATURE_COLUMNS"]).QUALITY_FEATURE_COLUMNS
+    rows.loc[rows.split.eq("train"),columns[0]]=np.nan
+    rows.loc[rows.split.eq("validation"),columns[0]]=999.0
+    captured=[]; original_fit=__import__("sklearn.impute",fromlist=["SimpleImputer"]).SimpleImputer.fit
+    def fit(self,x,*args,**kwargs):
+        captured.append(np.asarray(x)); return original_fit(self,x,*args,**kwargs)
+    monkeypatch.setattr("sklearn.impute.SimpleImputer.fit",fit)
+    reliability_audit._criterion4(rows)
+    assert captured and not np.isin(999.0,captured[0]).any()
+
+
+def test_existing_csv_finalization_skips_inference_and_rejects_test_rows(tmp_path,monkeypatch):
+    columns=__import__("scripts.analysis.segmentation_quality_features",fromlist=["QUALITY_FEATURE_COLUMNS"]).QUALITY_FEATURE_COLUMNS
+    rows=[]
+    for split in ("train","validation"):
+        for i in range(8):
+            helped=i%2==1
+            rows.append({"split":split,"label":i%2,"hard_masked_correct":helped,"original_correct":False,"hard_masked_outcome":"TP" if helped else "FN","high_confidence_hard_masked_error":False,"masked_benefit_bce":float(i),"masked_benefit_correctness":int(helped),"masked_helped":helped,"masked_hurt":False,"both_correct":False,"both_wrong":False,"hard_masked_probability":.5,**{key:float(i) for key in columns}})
+    csv=tmp_path/"audit.csv"; pd.DataFrame(rows).to_csv(csv,index=False)
+    monkeypatch.setattr(reliability_audit,"_checkpoint",lambda *args:pytest.fail("finalization must not load checkpoints"))
+    reliability_audit.audit(from_existing_audit_csv=csv,output_directory=tmp_path/"out",restart=True,seed=42)
+    assert (tmp_path/"out"/"audit_report.json").is_file()
+    bad=pd.read_csv(csv); bad.loc[0,"split"]="test"; bad.to_csv(csv,index=False)
+    with pytest.raises(ValueError,match="test rows"):
+        reliability_audit.audit(from_existing_audit_csv=csv,output_directory=tmp_path/"out2",restart=True,seed=42)

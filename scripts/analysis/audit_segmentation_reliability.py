@@ -10,6 +10,9 @@ import numpy as np, pandas as pd, torch
 from PIL import Image
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 ROOT = Path(__file__).resolve().parents[2]; sys.path[:0] = [str(ROOT), str(ROOT / "src")]
 from pneumonia_ai.classification.segmentation_guided import InputMode, prepare_classifier_image
@@ -23,9 +26,14 @@ from scripts.analysis.segmentation_quality_features import QUALITY_FEATURE_COLUM
 
 def parse_args() -> argparse.Namespace:
  p=argparse.ArgumentParser(description=__doc__)
- for n in ("splits-csv","image-root","segmentation-checkpoint","hard-masked-checkpoint","original-checkpoint","output-directory"): p.add_argument("--"+n,type=Path,required=True)
+ for n in ("splits-csv","image-root","segmentation-checkpoint","hard-masked-checkpoint","original-checkpoint"): p.add_argument("--"+n,type=Path)
+ p.add_argument("--output-directory",type=Path,required=True); p.add_argument("--from-existing-audit-csv",type=Path)
  p.add_argument("--mask-cache",type=Path); p.add_argument("--device",choices=("cpu","cuda"),default="cpu"); p.add_argument("--batch-size",type=int,default=16); p.add_argument("--num-workers",type=int,default=0); p.add_argument("--seed",type=int,default=42); p.add_argument("--max-samples",type=int); p.add_argument("--restart",action="store_true")
- return p.parse_args()
+ args=p.parse_args()
+ if args.from_existing_audit_csv is None:
+  missing=[name for name in ("splits_csv","image_root","segmentation_checkpoint","hard_masked_checkpoint","original_checkpoint") if getattr(args,name) is None]
+  if missing: p.error("the following arguments are required unless --from-existing-audit-csv is supplied: "+", ".join("--"+name.replace("_","-") for name in missing))
+ return args
 
 def _sha(path: Path) -> str:
  h=hashlib.sha256()
@@ -100,12 +108,37 @@ def _outcomes(prefix: str, row: dict[str,Any], target: int) -> None:
 def masking_benefit_targets(original_bce: float, hard_masked_bce: float, original_correct: bool, hard_masked_correct: bool) -> dict[str, float | int | bool]:
  """Paired, label-preserving targets; positive BCE benefit means masking helped."""
  delta=int(hard_masked_correct)-int(original_correct)
- return {"masked_benefit_bce":float(original_bce-hard_masked_bce),"masked_benefit_correctness":delta,"masked_helped":delta==1,"masked_hurt":delta==-1,"both_correct":bool(hard_masked_correct and original_correct),"both_wrong":bool(not hard_masked_correct and not original_correct)}
+ helped=bool(hard_masked_correct and not original_correct)
+ return {"masked_benefit_bce":float(original_bce-hard_masked_bce),"masked_benefit_correctness":delta,"masked_helped":helped,"masked_hurt":delta==-1,"both_correct":bool(hard_masked_correct and original_correct),"both_wrong":bool(not hard_masked_correct and not original_correct)}
+
+def normalize_masked_helped_target(values: pd.Series) -> pd.Series:
+ """Return the declared binary masking-benefit target as nullable integers."""
+ text=values.astype("string").str.strip().str.lower()
+ normalized=values.where(~text.isin({"true","false"}),text.map({"true":1,"false":0}))
+ numeric=pd.to_numeric(normalized,errors="coerce")
+ invalid=numeric.notna() & ~numeric.isin([0,1])
+ if invalid.any(): raise ValueError("masked_helped must be a binary 0/1 target; continuous values are not labels.")
+ return numeric.astype("Int64")
+
+def _criterion4_target(rows: pd.DataFrame) -> pd.Series:
+ saved=normalize_masked_helped_target(rows["masked_helped"])
+ hard=normalize_masked_helped_target(rows["hard_masked_correct"])
+ original=normalize_masked_helped_target(rows["original_correct"])
+ target=pd.Series(pd.NA,index=rows.index,dtype="Int64")
+ valid=hard.notna() & original.notna()
+ target.loc[valid]=((hard.loc[valid] == 1) & (original.loc[valid] == 0)).astype(int)
+ if not saved.dropna().eq(target.loc[saved.notna()]).all(): raise ValueError("masked_helped disagrees with hard_masked_correct and original_correct.")
+ return target
 
 def audit(**kwargs: Any) -> dict[str,Any]:
- args=argparse.Namespace(**kwargs); start=datetime.now(timezone.utc); dev=preflight(args) # no output mutation before this line
+ args=argparse.Namespace(**kwargs); start=datetime.now(timezone.utc)
  out=args.output_directory
  if out.exists() and any(out.iterdir()) and not args.restart: raise FileExistsError("Audit output exists; use --restart to overwrite.")
+ if getattr(args,"from_existing_audit_csv",None) is not None:
+  frame=_load_existing_audit_csv(args.from_existing_audit_csv)
+  print(f"Loaded existing audit CSV with {len(frame)} rows; skipping segmentation and classifier inference.")
+  return _finalize_audit(args,out,frame,start,existing_csv=True)
+ dev=preflight(args) # no output mutation before this line
  torch.manual_seed(args.seed); np.random.seed(args.seed); device=_device(args.device)
  hs,hc,hm=_checkpoint(args.hard_masked_checkpoint); os,oc,om=_checkpoint(args.original_checkpoint)
  validate_methodological_comparability(hc,oc,supplied_splits_csv=args.splits_csv)
@@ -131,8 +164,25 @@ def audit(**kwargs: Any) -> dict[str,Any]:
  frame=pd.DataFrame(rows)
  if (frame.split=="test").any(): raise RuntimeError("Safety failure: test rows would enter output.")
  frame.to_csv(out/"segmentation_reliability_audit.csv",index=False)
- definite=frame.loc[frame.label.isin([0,1])].copy(); summaries(out,frame,definite); report=report_and_gate(frame,definite)
- report.update({"arguments":{k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},"start_time":start.isoformat(),"end_time":datetime.now(timezone.utc).isoformat(),"device":str(device),"python":platform.python_version(),"pytorch":torch.__version__,"git_commit":_git(),"checkpoint_hashes":{"segmentation":_sha(args.segmentation_checkpoint),"hard_masked":_sha(args.hard_masked_checkpoint),"original":_sha(args.original_checkpoint)},"mask_threshold":threshold,"stochastic_features":"omitted: FrozenLungSegmenter exposes deterministic inference only; no safe TTA/dropout API exists."})
+ return _finalize_audit(args,out,frame,start,existing_csv=False,device=str(device),mask_threshold=threshold)
+
+def _load_existing_audit_csv(path: Path) -> pd.DataFrame:
+ if not path.is_file(): raise FileNotFoundError(f"Existing audit CSV does not exist: {path}")
+ frame=pd.read_csv(path)
+ required={"split","label","hard_masked_correct","original_correct","hard_masked_outcome","high_confidence_hard_masked_error","masked_benefit_bce","masked_benefit_correctness","masked_helped","masked_hurt","both_correct","both_wrong","hard_masked_probability",*QUALITY_FEATURE_COLUMNS}
+ missing=required-set(frame)
+ if missing: raise ValueError("Existing audit CSV is missing required columns: "+", ".join(sorted(missing)))
+ if frame.split.eq("test").any(): raise ValueError("Existing audit CSV contains test rows; finalization refuses test data.")
+ if not set(frame.split.dropna()).issubset({"train","validation"}): raise ValueError("Existing audit CSV has unsupported split values.")
+ return frame
+
+def _finalize_audit(args: argparse.Namespace, out: Path, frame: pd.DataFrame, start: datetime, *, existing_csv: bool, device: str="not_run", mask_threshold: float | None=None) -> dict[str,Any]:
+ out.mkdir(parents=True,exist_ok=True)
+ definite=frame.loc[pd.to_numeric(frame.label,errors="coerce").isin([0,1])].copy()
+ definite["masked_helped"]=_criterion4_target(definite)
+ summaries(out,frame,definite); report=report_and_gate(frame,definite)
+ hashes=None if existing_csv else {"segmentation":_sha(args.segmentation_checkpoint),"hard_masked":_sha(args.hard_masked_checkpoint),"original":_sha(args.original_checkpoint)}
+ report.update({"arguments":{k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},"start_time":start.isoformat(),"end_time":datetime.now(timezone.utc).isoformat(),"device":device,"python":platform.python_version(),"pytorch":torch.__version__,"git_commit":_git(),"checkpoint_hashes":hashes,"mask_threshold":mask_threshold,"finalized_from_existing_audit_csv":existing_csv,"stochastic_features":"omitted: FrozenLungSegmenter exposes deterministic inference only; no safe TTA/dropout API exists."})
  (out/"audit_report.json").write_text(json.dumps(report,indent=2,default=_json)); (out/"audit_metadata.json").write_text(json.dumps(report,indent=2,default=_json)); plots(out,definite)
  return report
 
@@ -144,7 +194,7 @@ def _json(v): return None if isinstance(v,float) and not math.isfinite(v) else s
 def _metrics(x: pd.DataFrame) -> dict[str,Any]:
  y=x.label.to_numpy(int); p=x.hard_masked_probability.to_numpy(float); pred=p>=.5; tp=((pred)&(y==1)).sum(); tn=((~pred)&(y==0)).sum(); fp=((pred)&(y==0)).sum(); fn=((~pred)&(y==1)).sum()
  sens=tp/(tp+fn) if tp+fn else np.nan; spec=tn/(tn+fp) if tn+fp else np.nan
- ece=sum(len(b)/len(y)*abs(b.hard_masked_probability.mean()-b.label.mean()) for b in np.array_split(x.sort_values("hard_masked_probability"),min(10,len(x))) if len(b)) if len(x) else np.nan
+ ordered=x.sort_values("hard_masked_probability"); chunks=(ordered.iloc[index] for index in np.array_split(np.arange(len(ordered)),min(10,len(ordered)))) if len(ordered) else (); ece=sum(len(b)/len(y)*abs(b.hard_masked_probability.mean()-b.label.mean()) for b in chunks if len(b)) if len(x) else np.nan
  return {"count":len(x),"auroc":roc_auc_score(y,p) if len(np.unique(y))==2 else np.nan,"auroc_reason":"single_class" if len(np.unique(y))<2 else "","pr_auc":average_precision_score(y,p) if len(np.unique(y))==2 else np.nan,"accuracy":(pred==y).mean() if len(y) else np.nan,"balanced_accuracy":np.nanmean([sens,spec]),"f1":2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else np.nan,"sensitivity":sens,"specificity":spec,"ece":ece,"brier_score":np.mean((p-y)**2) if len(y) else np.nan,"negative_log_likelihood":np.mean(-(y*np.log(np.clip(p,1e-7,1))+(1-y)*np.log(np.clip(1-p,1e-7,1)))) if len(y) else np.nan,"false_negative_rate":fn/(fn+tp) if fn+tp else np.nan,"mean_masked_benefit_bce":x.masked_benefit_bce.mean() if len(x) else np.nan}
 
 def _bh(p: np.ndarray) -> np.ndarray:
@@ -188,16 +238,32 @@ def report_and_gate(frame: pd.DataFrame,d: pd.DataFrame)->dict[str,Any]:
  if len(v)>3:
   v["reliability_quartile"]=pd.qcut(v.mask_entropy_mean,4,labels=False,duplicates="drop"); low=v[v.reliability_quartile==v.reliability_quartile.max()]; high=v[v.reliability_quartile==v.reliability_quartile.min()]; lowerr=(~low.hard_masked_correct).mean(); higherr=(~high.hard_masked_correct).mean(); criterion2=bool(higherr>0 and lowerr/higherr>=1.2); hfn=low.loc[low.hard_masked_outcome.eq("FN")].shape[0]/max((v.hard_masked_outcome=="FN").sum(),1); hen=len(low)/len(v); criterion3=bool(hen>0 and hfn/hen>=1.5)
  else: criterion2=criterion3=False; lowerr=higherr=np.nan
- # Training fit / validation evaluation: never uses validation labels to fit.
- criterion4=False; model_info={"status":"unavailable"}
- tr=d[d.split=="train"].dropna(subset=list(QUALITY_FEATURE_COLUMNS)); va=v.dropna(subset=list(QUALITY_FEATURE_COLUMNS))
- if len(tr)>5 and tr.masked_helped.nunique()==2 and len(va)>1 and va.masked_helped.nunique()==2:
-  model=LogisticRegression(max_iter=1000,random_state=0); model.fit(tr[list(QUALITY_FEATURE_COLUMNS)],tr.masked_helped); score=roc_auc_score(va.masked_helped,model.predict_proba(va[list(QUALITY_FEATURE_COLUMNS)])[:,1]); criterion4=score>=.60; model_info={"validation_auroc":score,"coefficients":dict(zip(QUALITY_FEATURE_COLUMNS,map(float,model.coef_[0])))}
+ # Criterion 4: train-only imputation/scaling and an explicitly binary target.
+ criterion4,model_info,criterion4_metadata=_criterion4(d)
  fn=[]
  for f in QUALITY_FEATURE_COLUMNS:
   x=v[[f,"hard_masked_outcome"]].dropna(); y=x.hard_masked_outcome.eq("FN"); r=x[f].corr(y,method="spearman") if y.nunique()==2 and x[f].nunique()>1 else np.nan; fn.append((f,r))
  sf=max(fn,key=lambda a:abs(a[1]) if np.isfinite(a[1]) else -1) if fn else (None,np.nan)
- return {"development_images_analyzed":len(frame),"definite_labels":len(d),"train_count":int((frame.split=="train").sum()),"validation_count":int((frame.split=="validation").sum()),"empty_mask_count":int(frame.empty_mask.sum()),"single_side_mask_count":int(frame.single_side_mask.sum()),"border_touch_count":int(frame.touches_image_border.sum()),"hard_masked_error_count":int((~d.hard_masked_correct).sum()),"original_image_error_count":int((~d.original_correct).sum()),"hard_masked_false_negative_count":int(d.hard_masked_outcome.eq("FN").sum()),"high_confidence_hard_masked_error_count":int(d.high_confidence_hard_masked_error.sum()),"fraction_masking_helped":float(d.masked_helped.mean()),"fraction_masking_hurt":float(d.masked_hurt.mean()),"strongest_quality_feature_associated_with_masked_benefit":{"feature":strongest[0],"spearman":strongest[1]},"strongest_feature_associated_with_false_negatives":{"feature":sf[0],"spearman":sf[1]},"quality_quartile_with_highest_false_negative_rate":"high_entropy_Q4","go_no_go":{"proceed":bool(criterion1 or criterion2 or criterion3 or criterion4),"criterion_1":criterion1,"criterion_2":criterion2,"criterion_3":criterion3,"criterion_4":criterion4,"logistic_model":model_info}}
+ return {"development_images_analyzed":len(frame),"definite_labels":len(d),"train_count":int((frame.split=="train").sum()),"validation_count":int((frame.split=="validation").sum()),"empty_mask_count":int(frame.empty_mask.sum()),"single_side_mask_count":int(frame.single_side_mask.sum()),"border_touch_count":int(frame.touches_image_border.sum()),"hard_masked_error_count":int((~d.hard_masked_correct).sum()),"original_image_error_count":int((~d.original_correct).sum()),"hard_masked_false_negative_count":int(d.hard_masked_outcome.eq("FN").sum()),"high_confidence_hard_masked_error_count":int(d.high_confidence_hard_masked_error.sum()),"fraction_masking_helped":float(d.masked_helped.mean()),"fraction_masking_hurt":float(d.masked_hurt.mean()),"strongest_quality_feature_associated_with_masked_benefit":{"feature":strongest[0],"spearman":strongest[1]},"strongest_feature_associated_with_false_negatives":{"feature":sf[0],"spearman":sf[1]},"quality_quartile_with_highest_false_negative_rate":"high_entropy_Q4",**criterion4_metadata,"go_no_go":{"proceed":bool(criterion1 or criterion2 or criterion3 or criterion4),"criterion_1":criterion1,"criterion_2":criterion2,"criterion_3":criterion3,"criterion_4":criterion4,"logistic_model":model_info}}
+
+def _criterion4(rows: pd.DataFrame) -> tuple[bool,dict[str,Any],dict[str,Any]]:
+ target=_criterion4_target(rows)
+ train=rows.loc[rows.split.eq("train")].copy(); validation=rows.loc[rows.split.eq("validation")].copy()
+ y_train=target.loc[train.index].dropna().astype(int); y_validation=target.loc[validation.index].dropna().astype(int)
+ metadata={"criterion4_target_definition":"hard_masked_correct & ~original_correct (binary 0/1)","criterion4_training_count":int(len(y_train)),"criterion4_validation_count":int(len(y_validation)),"criterion4_training_positive_count":int(y_train.sum()),"criterion4_validation_positive_count":int(y_validation.sum()),"criterion4_status":"not_evaluable","criterion4_reason":""}
+ if not set(y_train.unique()).issubset({0,1}) or not set(y_validation.unique()).issubset({0,1}): raise ValueError("criterion 4 masked_helped target must contain only 0 and 1.")
+ if len(y_train)==0: metadata["criterion4_reason"]="no definite training targets"; return False,{"status":"not_evaluable","reason":metadata["criterion4_reason"]},metadata
+ if y_train.nunique()!=2: metadata["criterion4_reason"]="training target has a single class"; return False,{"status":"not_evaluable","reason":metadata["criterion4_reason"]},metadata
+ if len(y_validation)==0: metadata["criterion4_reason"]="no definite validation targets"; return False,{"status":"not_evaluable","reason":metadata["criterion4_reason"]},metadata
+ if y_validation.nunique()!=2: metadata["criterion4_reason"]="validation target has a single class; AUROC is undefined"; return False,{"status":"not_evaluable","reason":metadata["criterion4_reason"]},metadata
+ train_features=train.loc[y_train.index,list(QUALITY_FEATURE_COLUMNS)].replace([np.inf,-np.inf],np.nan)
+ validation_features=validation.loc[y_validation.index,list(QUALITY_FEATURE_COLUMNS)].replace([np.inf,-np.inf],np.nan)
+ model=Pipeline([("imputer",SimpleImputer(strategy="median")),("scaler",StandardScaler()),("logistic",LogisticRegression(max_iter=1000,random_state=0,C=1.0))])
+ model.fit(train_features,y_train)
+ score=float(roc_auc_score(y_validation,model.predict_proba(validation_features)[:,1]))
+ metadata["criterion4_status"]="evaluated"
+ logistic=model.named_steps["logistic"]
+ return score>=.60,{"status":"evaluated","validation_auroc":score,"coefficients":dict(zip(QUALITY_FEATURE_COLUMNS,map(float,logistic.coef_[0])))},metadata
 
 def _save(fig: Any, out: Path, name: str) -> None:
  fig.tight_layout(); fig.savefig(out/(name+".png"),dpi=300); fig.savefig(out/(name+".pdf")); plt.close(fig)
