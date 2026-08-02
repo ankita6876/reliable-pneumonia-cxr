@@ -113,22 +113,38 @@ def masking_benefit_targets(original_bce: float, hard_masked_bce: float, origina
 
 def normalize_masked_helped_target(values: pd.Series) -> pd.Series:
  """Return the declared binary masking-benefit target as nullable integers."""
+ return normalize_binary_boolean_series(values,name="masked_helped").astype("Int64")
+
+def normalize_binary_boolean_series(values: pd.Series, *, name: str) -> pd.Series:
+ """Strictly normalize a 0/1 or Boolean column, preserving missing values."""
  text=values.astype("string").str.strip().str.lower()
- normalized=values.where(~text.isin({"true","false"}),text.map({"true":1,"false":0}))
- numeric=pd.to_numeric(normalized,errors="coerce")
- invalid=numeric.notna() & ~numeric.isin([0,1])
- if invalid.any(): raise ValueError("masked_helped must be a binary 0/1 target; continuous values are not labels.")
- return numeric.astype("Int64")
+ mapped=values.where(~text.isin({"true","false"}),text.map({"true":1,"false":0}))
+ numeric=pd.to_numeric(mapped,errors="coerce")
+ invalid=values.notna() & (numeric.isna() | ~numeric.isin([0,1]))
+ if invalid.any():
+  examples=values.loc[invalid].head(3).tolist()
+  raise ValueError(f"{name} must contain only Boolean or verified 0/1 values; continuous or invalid values: {examples!r}")
+ return numeric.astype("Int64").astype("boolean")
 
 def _criterion4_target(rows: pd.DataFrame) -> pd.Series:
  saved=normalize_masked_helped_target(rows["masked_helped"])
- hard=normalize_masked_helped_target(rows["hard_masked_correct"])
- original=normalize_masked_helped_target(rows["original_correct"])
+ hard=normalize_binary_boolean_series(rows["hard_masked_correct"],name="hard_masked_correct").astype("Int64")
+ original=normalize_binary_boolean_series(rows["original_correct"],name="original_correct").astype("Int64")
  target=pd.Series(pd.NA,index=rows.index,dtype="Int64")
  valid=hard.notna() & original.notna()
  target.loc[valid]=((hard.loc[valid] == 1) & (original.loc[valid] == 0)).astype(int)
  if not saved.dropna().eq(target.loc[saved.notna()]).all(): raise ValueError("masked_helped disagrees with hard_masked_correct and original_correct.")
  return target
+
+def _recalculate_masking_indicators(rows: pd.DataFrame) -> None:
+ hard=normalize_binary_boolean_series(rows["hard_masked_correct"],name="hard_masked_correct")
+ original=normalize_binary_boolean_series(rows["original_correct"],name="original_correct")
+ derived={"masked_helped":hard & ~original,"masked_hurt":~hard & original,"both_correct":hard & original,"both_wrong":~hard & ~original}
+ for column,value in derived.items():
+  saved=normalize_binary_boolean_series(rows[column],name=column)
+  comparable=saved.notna() & value.notna()
+  if not saved.loc[comparable].eq(value.loc[comparable]).all(): raise ValueError(f"{column} disagrees with correctness columns.")
+  rows[column]=value
 
 def audit(**kwargs: Any) -> dict[str,Any]:
  args=argparse.Namespace(**kwargs); start=datetime.now(timezone.utc)
@@ -179,6 +195,9 @@ def _load_existing_audit_csv(path: Path) -> pd.DataFrame:
 def _finalize_audit(args: argparse.Namespace, out: Path, frame: pd.DataFrame, start: datetime, *, existing_csv: bool, device: str="not_run", mask_threshold: float | None=None) -> dict[str,Any]:
  out.mkdir(parents=True,exist_ok=True)
  definite=frame.loc[pd.to_numeric(frame.label,errors="coerce").isin([0,1])].copy()
+ for column in ("hard_masked_correct","original_correct","high_confidence_hard_masked_error","masked_hurt","both_correct","both_wrong"):
+  definite[column]=normalize_binary_boolean_series(definite[column],name=column)
+ _recalculate_masking_indicators(definite)
  definite["masked_helped"]=_criterion4_target(definite)
  summaries(out,frame,definite); report=report_and_gate(frame,definite)
  hashes=None if existing_csv else {"segmentation":_sha(args.segmentation_checkpoint),"hard_masked":_sha(args.hard_masked_checkpoint),"original":_sha(args.original_checkpoint)}
@@ -228,6 +247,10 @@ def summaries(out: Path, allrows: pd.DataFrame, d: pd.DataFrame) -> None:
  pd.DataFrame(benefit).to_csv(out/"masked_benefit_summary.csv",index=False)
 
 def report_and_gate(frame: pd.DataFrame,d: pd.DataFrame)->dict[str,Any]:
+ d=d.copy()
+ for column in ("hard_masked_correct","original_correct","high_confidence_hard_masked_error","masked_helped","masked_hurt"):
+  d[column]=normalize_binary_boolean_series(d[column],name=column)
+ counts=_audit_count_invariants(d)
  v=d.loc[d.split=="validation"].copy(); cor=pd.read_csv(frame.attrs.get("correlation_path","x")) if False else None
  # Criterion 1 is recomputed here to keep the decision gate self-contained.
  associations=[]
@@ -236,7 +259,7 @@ def report_and_gate(frame: pd.DataFrame,d: pd.DataFrame)->dict[str,Any]:
  valid=np.array([a[2] for a in associations],float); adj=_bh(np.where(np.isfinite(valid),valid,1)); strongest=associations[int(np.nanargmax(np.abs([a[1] for a in associations])))] if associations else (None,np.nan,np.nan); criterion1=any(abs(r)>=.1 and q<.05 for (_,r,_),q in zip(associations,adj))
  # Low reliability is operationalised as high entropy (Q4), declared rather than tuned.
  if len(v)>3:
-  v["reliability_quartile"]=pd.qcut(v.mask_entropy_mean,4,labels=False,duplicates="drop"); low=v[v.reliability_quartile==v.reliability_quartile.max()]; high=v[v.reliability_quartile==v.reliability_quartile.min()]; lowerr=(~low.hard_masked_correct).mean(); higherr=(~high.hard_masked_correct).mean(); criterion2=bool(higherr>0 and lowerr/higherr>=1.2); hfn=low.loc[low.hard_masked_outcome.eq("FN")].shape[0]/max((v.hard_masked_outcome=="FN").sum(),1); hen=len(low)/len(v); criterion3=bool(hen>0 and hfn/hen>=1.5)
+  v["reliability_quartile"]=pd.qcut(v.mask_entropy_mean,4,labels=False,duplicates="drop"); low=v[v.reliability_quartile==v.reliability_quartile.max()]; high=v[v.reliability_quartile==v.reliability_quartile.min()]; lowerr=(~normalize_binary_boolean_series(low.hard_masked_correct,name="hard_masked_correct").dropna()).mean(); higherr=(~normalize_binary_boolean_series(high.hard_masked_correct,name="hard_masked_correct").dropna()).mean(); criterion2=bool(higherr>0 and lowerr/higherr>=1.2); hfn=low.loc[low.hard_masked_outcome.eq("FN")].shape[0]/max((v.hard_masked_outcome=="FN").sum(),1); hen=len(low)/len(v); criterion3=bool(hen>0 and hfn/hen>=1.5)
  else: criterion2=criterion3=False; lowerr=higherr=np.nan
  # Criterion 4: train-only imputation/scaling and an explicitly binary target.
  criterion4,model_info,criterion4_metadata=_criterion4(d)
@@ -244,7 +267,23 @@ def report_and_gate(frame: pd.DataFrame,d: pd.DataFrame)->dict[str,Any]:
  for f in QUALITY_FEATURE_COLUMNS:
   x=v[[f,"hard_masked_outcome"]].dropna(); y=x.hard_masked_outcome.eq("FN"); r=x[f].corr(y,method="spearman") if y.nunique()==2 and x[f].nunique()>1 else np.nan; fn.append((f,r))
  sf=max(fn,key=lambda a:abs(a[1]) if np.isfinite(a[1]) else -1) if fn else (None,np.nan)
- return {"development_images_analyzed":len(frame),"definite_labels":len(d),"train_count":int((frame.split=="train").sum()),"validation_count":int((frame.split=="validation").sum()),"empty_mask_count":int(frame.empty_mask.sum()),"single_side_mask_count":int(frame.single_side_mask.sum()),"border_touch_count":int(frame.touches_image_border.sum()),"hard_masked_error_count":int((~d.hard_masked_correct).sum()),"original_image_error_count":int((~d.original_correct).sum()),"hard_masked_false_negative_count":int(d.hard_masked_outcome.eq("FN").sum()),"high_confidence_hard_masked_error_count":int(d.high_confidence_hard_masked_error.sum()),"fraction_masking_helped":float(d.masked_helped.mean()),"fraction_masking_hurt":float(d.masked_hurt.mean()),"strongest_quality_feature_associated_with_masked_benefit":{"feature":strongest[0],"spearman":strongest[1]},"strongest_feature_associated_with_false_negatives":{"feature":sf[0],"spearman":sf[1]},"quality_quartile_with_highest_false_negative_rate":"high_entropy_Q4",**criterion4_metadata,"go_no_go":{"proceed":bool(criterion1 or criterion2 or criterion3 or criterion4),"criterion_1":criterion1,"criterion_2":criterion2,"criterion_3":criterion3,"criterion_4":criterion4,"logistic_model":model_info}}
+ return {"development_images_analyzed":len(frame),"definite_labels":len(d),"train_count":int((frame.split=="train").sum()),"validation_count":int((frame.split=="validation").sum()),"empty_mask_count":int(frame.empty_mask.sum()),"single_side_mask_count":int(frame.single_side_mask.sum()),"border_touch_count":int(frame.touches_image_border.sum()),"hard_masked_error_count":counts["hard_masked_error_count"],"original_image_error_count":counts["original_image_error_count"],"hard_masked_false_negative_count":counts["hard_masked_false_negative_count"],"high_confidence_hard_masked_error_count":counts["high_confidence_hard_masked_error_count"],"fraction_masking_helped":float(d.masked_helped.mean()),"fraction_masking_hurt":float(d.masked_hurt.mean()),"strongest_quality_feature_associated_with_masked_benefit":{"feature":strongest[0],"spearman":strongest[1]},"strongest_feature_associated_with_false_negatives":{"feature":sf[0],"spearman":sf[1]},"quality_quartile_with_highest_false_negative_rate":"high_entropy_Q4",**criterion4_metadata,"go_no_go":{"proceed":bool(criterion1 or criterion2 or criterion3 or criterion4),"criterion_1":criterion1,"criterion_2":criterion2,"criterion_3":criterion3,"criterion_4":criterion4,"logistic_model":model_info}}
+
+def _audit_count_invariants(rows: pd.DataFrame) -> dict[str,int]:
+ n=len(rows)
+ hard=rows["hard_masked_correct"]; original=rows["original_correct"]
+ if hard.isna().any() or original.isna().any(): raise ValueError("Correctness columns contain missing values for definite-label rows.")
+ hard_errors=int((~hard.dropna()).sum()); original_errors=int((~original.dropna()).sum())
+ outcomes=rows["hard_masked_outcome"].astype("string")
+ outcome_counts={name:int(outcomes.eq(name).sum()) for name in ("TP","TN","FP","FN")}
+ if outcomes.isna().any() or sum(outcome_counts.values())!=n:
+  raise ValueError("Hard-masked outcome invariant failed: TP + TN + FP + FN must equal definite-label rows.")
+ if int(hard.sum())+hard_errors!=n or int(original.sum())+original_errors!=n:
+  raise ValueError("Correctness invariant failed: correct count + error count must equal definite-label rows.")
+ high_confidence=int(rows["high_confidence_hard_masked_error"].dropna().sum())
+ values={"hard_masked_error_count":hard_errors,"original_image_error_count":original_errors,"hard_masked_false_negative_count":outcome_counts["FN"],"high_confidence_hard_masked_error_count":high_confidence}
+ if any(value<0 or value>n for value in values.values()): raise ValueError("Audit count invariant failed: counts must be between zero and definite-label rows.")
+ return values
 
 def _criterion4(rows: pd.DataFrame) -> tuple[bool,dict[str,Any],dict[str,Any]]:
  target=_criterion4_target(rows)
@@ -278,8 +317,10 @@ def plots(out: Path,d: pd.DataFrame) -> None:
  try:v["q"]=pd.qcut(v.mask_entropy_mean,4,labels=["Q1","Q2","Q3","Q4"],duplicates="drop")
  except ValueError:v["q"]="all"
  for target,name,ylabel in [("hard_masked_correct","error_rate_by_reliability_quartile","Error rate"),("hard_masked_outcome","false_negative_rate_by_reliability_quartile","False-negative rate")]:
-  fig,ax=plt.subplots(figsize=(6,4)); values=[]
-  for _,x in v.groupby("q",observed=True): values.append((~x.hard_masked_correct).mean() if target=="hard_masked_correct" else x.hard_masked_outcome.eq("FN").mean())
+ fig,ax=plt.subplots(figsize=(6,4)); values=[]
+  for _,x in v.groupby("q",observed=True):
+   correct=normalize_binary_boolean_series(x.hard_masked_correct,name="hard_masked_correct")
+   values.append((~correct.dropna()).mean() if target=="hard_masked_correct" else x.hard_masked_outcome.eq("FN").mean())
   ax.bar([str(q) for q in v.q.drop_duplicates()],values); ax.set(ylabel=ylabel,xlabel="Entropy quartile (Q4 lowest reliability)"); _save(fig,out,name)
  fig,ax=plt.subplots(figsize=(6,4));
  for q,x in v.groupby("q",observed=True):

@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 import numpy as np
 import pandas as pd
@@ -140,6 +141,18 @@ def test_masked_helped_target_is_binary_and_normalizes_boolean_object_values():
     assert target.dropna().tolist()==[1,0,1,0,1,0]
 
 
+def test_correctness_normalization_accepts_integer_boolean_and_nullable_values():
+    integer=reliability_audit.normalize_binary_boolean_series(pd.Series([1,0]),name="correct")
+    boolean=reliability_audit.normalize_binary_boolean_series(pd.Series([True,False]),name="correct")
+    nullable=reliability_audit.normalize_binary_boolean_series(pd.Series([True,pd.NA],dtype="boolean"),name="correct")
+    assert integer.tolist()==[True,False] and boolean.tolist()==[True,False] and nullable.isna().sum()==1
+
+
+def test_correctness_normalization_rejects_continuous_values():
+    with pytest.raises(ValueError,match="continuous"):
+        reliability_audit.normalize_binary_boolean_series(pd.Series([0.5]),name="correct")
+
+
 def test_continuous_masked_helped_values_are_rejected():
     with pytest.raises(ValueError,match="continuous"):
         reliability_audit.normalize_masked_helped_target(pd.Series([0.25]))
@@ -178,11 +191,22 @@ def test_existing_csv_finalization_skips_inference_and_rejects_test_rows(tmp_pat
     for split in ("train","validation"):
         for i in range(8):
             helped=i%2==1
-            rows.append({"split":split,"label":i%2,"hard_masked_correct":helped,"original_correct":False,"hard_masked_outcome":"TP" if helped else "FN","high_confidence_hard_masked_error":False,"masked_benefit_bce":float(i),"masked_benefit_correctness":int(helped),"masked_helped":helped,"masked_hurt":False,"both_correct":False,"both_wrong":False,"hard_masked_probability":.5,**{key:float(i) for key in columns}})
+            rows.append({"split":split,"label":i%2,"hard_masked_correct":helped,"original_correct":False,"hard_masked_outcome":"TP" if helped else "FN","high_confidence_hard_masked_error":False,"masked_benefit_bce":float(i),"masked_benefit_correctness":int(helped),"masked_helped":helped,"masked_hurt":False,"both_correct":False,"both_wrong":not helped,"hard_masked_probability":.5,**{key:float(i) for key in columns}})
     csv=tmp_path/"audit.csv"; pd.DataFrame(rows).to_csv(csv,index=False)
     monkeypatch.setattr(reliability_audit,"_checkpoint",lambda *args:pytest.fail("finalization must not load checkpoints"))
     reliability_audit.audit(from_existing_audit_csv=csv,output_directory=tmp_path/"out",restart=True,seed=42)
     assert (tmp_path/"out"/"audit_report.json").is_file()
+    report=json.loads((tmp_path/"out"/"audit_report.json").read_text())
+    assert report["hard_masked_error_count"]==8 and report["original_image_error_count"]==16
+    assert report["hard_masked_false_negative_count"]==8 and report["high_confidence_hard_masked_error_count"]==0
     bad=pd.read_csv(csv); bad.loc[0,"split"]="test"; bad.to_csv(csv,index=False)
     with pytest.raises(ValueError,match="test rows"):
         reliability_audit.audit(from_existing_audit_csv=csv,output_directory=tmp_path/"out2",restart=True,seed=42)
+
+
+def test_confusion_count_invariant_rejects_invalid_outcomes():
+    rows=pd.DataFrame({"hard_masked_correct":[1,0],"original_correct":[1,0],"high_confidence_hard_masked_error":[0,0],"hard_masked_outcome":["TP","invalid"]})
+    for column in ("hard_masked_correct","original_correct","high_confidence_hard_masked_error"):
+        rows[column]=reliability_audit.normalize_binary_boolean_series(rows[column],name=column)
+    with pytest.raises(ValueError,match="TP \+ TN \+ FP \+ FN"):
+        reliability_audit._audit_count_invariants(rows)
