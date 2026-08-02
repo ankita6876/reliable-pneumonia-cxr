@@ -317,7 +317,7 @@ def plots(out: Path,d: pd.DataFrame) -> None:
  try:v["q"]=pd.qcut(v.mask_entropy_mean,4,labels=["Q1","Q2","Q3","Q4"],duplicates="drop")
  except ValueError:v["q"]="all"
  for target,name,ylabel in [("hard_masked_correct","error_rate_by_reliability_quartile","Error rate"),("hard_masked_outcome","false_negative_rate_by_reliability_quartile","False-negative rate")]:
- fig,ax=plt.subplots(figsize=(6,4)); values=[]
+   fig,ax=plt.subplots(figsize=(6,4)); values=[]
   for _,x in v.groupby("q",observed=True):
    correct=normalize_binary_boolean_series(x.hard_masked_correct,name="hard_masked_correct")
    values.append((~correct.dropna()).mean() if target=="hard_masked_correct" else x.hard_masked_outcome.eq("FN").mean())
