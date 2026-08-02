@@ -10,6 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 from scripts.analysis.segmentation_quality_features import binary_entropy, segmentation_quality_features
 import scripts.analysis.audit_segmentation_reliability as reliability_audit
 from scripts.analysis.audit_segmentation_reliability import _device, masking_benefit_targets, preflight, report_and_gate, validate_methodological_comparability
+from scripts.classification.checkpoint_compatibility import resolve_methodological_metadata
 
 
 def _checkpoint(path, configuration):
@@ -21,6 +22,12 @@ def _checkpoint(path, configuration):
 def _load_checkpoint(path, monkeypatch):
     monkeypatch.setattr(reliability_audit,"create_model",lambda *args,**kwargs:nn.Linear(1,1))
     return reliability_audit._checkpoint(path)[1]
+
+
+def _manifest(tmp_path):
+    path=tmp_path/"chexpert_splits.csv"
+    path.write_text("split,patient_id,study_id,image_path,pneumonia_label\ntrain,p1,s1,x.png,1\nvalidation,p2,s2,y.png,0\n")
+    return path
 
 def test_entropy_confident_and_uncertain_masks():
     assert binary_entropy(np.array([.5]))[0] > binary_entropy(np.array([.01]))[0]
@@ -74,14 +81,16 @@ def test_old_nested_original_checkpoint_remains_supported(tmp_path, monkeypatch)
     assert config["input_mode"]=="original" and config["classifier_image_size"]==256
 
 
-def test_a4_and_original_control_are_methodologically_comparable():
+def test_a4_and_original_control_are_methodologically_comparable(tmp_path):
+    manifest=_manifest(tmp_path)
     shared={"backbone":"densenet121","pretrained":True,"preprocessing":"imagenet","classifier_image_size":224,"augmentation":"historical","loss":"weighted_bce","optimizer":"adamw","learning_rate":1e-5,"weight_decay":1e-5,"epochs":20}
-    validate_methodological_comparability({**shared,"input_mode":"hard_masked"},{**shared,"input_mode":"original"})
+    validate_methodological_comparability({**shared,"input_mode":"hard_masked"},{**shared,"input_mode":"original","dataset_split_path":"/kaggle/input/assets/chexpert_splits.csv","label_policy":"ignore"},supplied_splits_csv=manifest)
 
 
-def test_comparability_reports_all_hyperparameter_mismatches():
+def test_comparability_reports_all_hyperparameter_mismatches(tmp_path):
+    manifest=_manifest(tmp_path)
     with pytest.raises(ValueError) as error:
-        validate_methodological_comparability({"input_mode":"hard_masked","backbone":"densenet121","learning_rate":1e-5,"epochs":20},{"input_mode":"original","backbone":"resnet50","learning_rate":1e-4,"epochs":10})
+        validate_methodological_comparability({"input_mode":"hard_masked","backbone":"densenet121","learning_rate":1e-5,"epochs":20},{"input_mode":"original","backbone":"resnet50","learning_rate":1e-4,"epochs":10},supplied_splits_csv=manifest)
     message=str(error.value)
     assert "backbone:" in message and "learning_rate:" in message and "epochs:" in message
 
@@ -89,3 +98,28 @@ def test_comparability_reports_all_hyperparameter_mismatches():
 def test_ambiguous_checkpoint_schema_fails_clearly(tmp_path, monkeypatch):
     with pytest.raises(ValueError,match=r"Ambiguous checkpoint configuration schema.*Detected keys: epoch"):
         _load_checkpoint(_checkpoint(tmp_path/"ambiguous.pt",{"epoch":3}),monkeypatch)
+
+
+def test_missing_legacy_metadata_resolves_from_supplied_manifest(tmp_path):
+    manifest=_manifest(tmp_path)
+    resolved=resolve_methodological_metadata({"experiment":"A4","backbone":"densenet121","pretrained":True,"input_size":224,"loss":"weighted_bce","optimizer":"adamw"},supplied_splits_csv=manifest)
+    assert resolved["dataset_split_path"].startswith("sha256:") and resolved["label_policy"]=="ignore"
+
+
+def test_windows_and_kaggle_manifest_paths_do_not_mismatch(tmp_path):
+    manifest=_manifest(tmp_path)
+    shared={"backbone":"densenet121","input_mode":"hard_masked"}
+    validate_methodological_comparability({**shared,"dataset_split_path":r"C:\data\chexpert_splits.csv"},{**shared,"input_mode":"original","dataset_split_path":"/kaggle/input/assets/chexpert_splits.csv"},supplied_splits_csv=manifest)
+
+
+def test_saved_manifest_content_identity_mismatch_fails(tmp_path):
+    manifest=_manifest(tmp_path); other=tmp_path/"other"; other.mkdir()
+    saved=other/manifest.name; saved.write_text("different manifest")
+    with pytest.raises(ValueError,match="content does not match"):
+        resolve_methodological_metadata({"input_mode":"original","dataset_split_path":str(saved)},supplied_splits_csv=manifest)
+
+
+def test_explicit_conflicting_label_policy_fails(tmp_path):
+    manifest=_manifest(tmp_path)
+    with pytest.raises(ValueError,match="label_policy"):
+        validate_methodological_comparability({"input_mode":"hard_masked"},{"input_mode":"original","label_policy":"u_zero"},supplied_splits_csv=manifest)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -22,6 +23,7 @@ _OPTIMISATION_SCHEMA_MARKERS = frozenset({
     "experiment", "backbone", "pretrained", "input_size", "loss", "optimizer",
 })
 _NESTED_ORIGINAL_MODEL_MARKERS = frozenset({"name", "image_size", "preprocessing"})
+_VERIFIED_OPTIMISATION_LABEL_POLICY = "ignore"
 
 
 def load_adjacent_experiment_configuration(checkpoint: Path) -> Mapping[str, Any] | None:
@@ -88,6 +90,64 @@ def normalize_nested_original_baseline_configuration(
         "preprocessing": model.get("preprocessing", "imagenet"),
         "backbone": model.get("name", "densenet121"),
     }
+
+
+def resolve_methodological_metadata(
+    configuration: Mapping[str, Any], *, supplied_splits_csv: Path,
+) -> dict[str, object]:
+    """Resolve audit-comparability metadata against the supplied manifest.
+
+    Checkpoint locations are machine-specific, so the effective split identity is
+    the SHA-256 of the manifest explicitly selected for this audit.  A recorded
+    path is checked when it can be inspected, but is never compared as an
+    absolute path.
+    """
+    schema = classify_checkpoint_configuration(configuration)
+    supplied = Path(supplied_splits_csv).resolve()
+    if not supplied.is_file():
+        raise FileNotFoundError(f"Supplied split manifest does not exist: {supplied}")
+    supplied_hash = _file_sha256(supplied)
+    saved_path = configuration.get("dataset_split_path")
+    if saved_path is not None:
+        if not isinstance(saved_path, (str, Path)):
+            raise ValueError("Checkpoint dataset_split_path must be a path string.")
+        recorded = Path(saved_path)
+        recorded_name = _portable_path_name(saved_path)
+        if recorded_name != supplied.name:
+            raise ValueError(
+                "Checkpoint dataset_split_path filename does not match the supplied "
+                f"manifest: {recorded_name!r} != {supplied.name!r}."
+            )
+        if recorded.is_file() and _file_sha256(recorded) != supplied_hash:
+            raise ValueError(
+                "Checkpoint dataset_split_path content does not match the supplied manifest."
+            )
+    label_policy = configuration.get("label_policy")
+    if label_policy is None:
+        if schema not in {"optimisation", "legacy_optimisation"}:
+            raise ValueError(
+                "Checkpoint lacks label_policy and is not a recognised optimisation schema."
+            )
+        label_policy = _VERIFIED_OPTIMISATION_LABEL_POLICY
+    if not isinstance(label_policy, str):
+        raise ValueError("Checkpoint label_policy must be a string.")
+    resolved = dict(configuration)
+    resolved["dataset_split_path"] = f"sha256:{supplied_hash}"
+    resolved["label_policy"] = label_policy
+    return resolved
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _portable_path_name(value: str | Path) -> str:
+    """Extract a filename from either Windows or POSIX checkpoint metadata."""
+    return str(value).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
 
 
 def normalize_checkpoint_configuration(

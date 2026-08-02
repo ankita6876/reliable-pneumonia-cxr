@@ -16,7 +16,7 @@ from pneumonia_ai.classification.segmentation_guided import InputMode, prepare_c
 from pneumonia_ai.models.factory import create_model
 from pneumonia_ai.segmentation.cache import MaskCache
 from pneumonia_ai.segmentation.inference import FrozenLungSegmenter
-from scripts.classification.checkpoint_compatibility import (classify_checkpoint_configuration, load_adjacent_experiment_configuration, normalize_checkpoint_configuration, normalize_nested_original_baseline_configuration)
+from scripts.classification.checkpoint_compatibility import (classify_checkpoint_configuration, load_adjacent_experiment_configuration, normalize_checkpoint_configuration, normalize_nested_original_baseline_configuration, resolve_methodological_metadata)
 from scripts.train_baseline import _transforms
 from scripts.analysis.segmentation_quality_features import QUALITY_FEATURE_COLUMNS, segmentation_quality_features
 
@@ -61,7 +61,7 @@ def _checkpoint(path: Path) -> tuple[dict[str,Any],dict[str,Any],torch.nn.Module
  if schema in {"optimisation","legacy_optimisation"}:
   if schema == "legacy_optimisation": raw={**raw,"input_mode":InputMode.HARD_MASKED.value}
   config=normalize_checkpoint_configuration(raw,adjacent)
-  if adjacent: config.update({k:v for k,v in adjacent.items() if k not in config or k in {"dataset_split_path","label_policy"}})
+  if adjacent: config.update({k:v for k,v in adjacent.items() if k not in config})
  else:
   config=normalize_nested_original_baseline_configuration(raw)
  config.setdefault("backbone","densenet121"); model=create_model(str(config["backbone"]),pretrained=False)
@@ -69,10 +69,12 @@ def _checkpoint(path: Path) -> tuple[dict[str,Any],dict[str,Any],torch.nn.Module
  if key not in state: raise ValueError(f"Checkpoint lacks model weights: {path}")
  model.load_state_dict(state[key],strict=True); return state,config,model
 
-COMPARABILITY_FIELDS = ("backbone", "pretrained", "preprocessing", "classifier_image_size", "augmentation", "horizontal_flip", "rotation_degrees", "loss", "optimizer", "learning_rate", "backbone_learning_rate", "head_learning_rate", "weight_decay", "scheduler", "batch_size", "epochs", "early_stopping_patience", "seed", "dataset_split_path", "label_policy")
+COMPARABILITY_FIELDS = ("backbone", "pretrained", "preprocessing", "input_size", "classifier_image_size", "augmentation", "horizontal_flip", "rotation_degrees", "loss", "optimizer", "learning_rate", "backbone_learning_rate", "head_learning_rate", "weight_decay", "scheduler", "batch_size", "epochs", "early_stopping_patience", "seed", "dataset_split_path", "label_policy")
 
-def validate_methodological_comparability(hard: Mapping[str,Any], original: Mapping[str,Any]) -> None:
+def validate_methodological_comparability(hard: Mapping[str,Any], original: Mapping[str,Any], *, supplied_splits_csv: Path) -> None:
  """Require paired A4/control checkpoints to differ only in input treatment."""
+ hard=resolve_methodological_metadata(hard,supplied_splits_csv=supplied_splits_csv)
+ original=resolve_methodological_metadata(original,supplied_splits_csv=supplied_splits_csv)
  mismatches=[]
  for field in COMPARABILITY_FIELDS:
   # Optimisation checkpoints store these fields directly; legacy aliases are only for clear errors.
@@ -106,7 +108,7 @@ def audit(**kwargs: Any) -> dict[str,Any]:
  if out.exists() and any(out.iterdir()) and not args.restart: raise FileExistsError("Audit output exists; use --restart to overwrite.")
  torch.manual_seed(args.seed); np.random.seed(args.seed); device=_device(args.device)
  hs,hc,hm=_checkpoint(args.hard_masked_checkpoint); os,oc,om=_checkpoint(args.original_checkpoint)
- validate_methodological_comparability(hc,oc)
+ validate_methodological_comparability(hc,oc,supplied_splits_csv=args.splits_csv)
  segmenter=FrozenLungSegmenter(args.segmentation_checkpoint,device); hm.to(device).eval(); om.to(device).eval(); htf,otf=_transform(hc),_transform(oc); threshold=float(hc["mask_threshold"])
  out.mkdir(parents=True,exist_ok=True); cache=MaskCache(args.mask_cache or out/"mask_cache")
  cache.validate_or_initialise_metadata({"schema_version":1,"segmentation_checkpoint_sha256":_sha(args.segmentation_checkpoint),"segmentation_input_size":segmenter.image_size,"mask_threshold":threshold,"postprocessing":"none"})
