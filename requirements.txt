@@ -6,6 +6,7 @@ pandas
 numpy
 opencv-python-headless
 scikit-learn
+scipy
 matplotlib
 pyyaml
 pytest
