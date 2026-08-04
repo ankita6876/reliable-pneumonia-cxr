@@ -126,25 +126,46 @@ def resolve_gradcam_target_layer(model: nn.Module) -> nn.Module:
     return convolutions[-1]
 
 
+def gradcam_target_metadata(model: nn.Module, layer: nn.Module, activation_shape: tuple[int, ...] | None = None) -> dict[str, Any]:
+    name = next((name for name, module in model.named_modules() if module is layer), "<unresolved>")
+    return {"module_name": name, "module_class": type(layer).__name__, "activation_shape": list(activation_shape) if activation_shape else None}
+
+
 class GradCAM:
     def __init__(self, model: nn.Module, layer: nn.Module) -> None:
         self.model, self.layer, self.activations, self.gradients = model, layer, None, None
         self._forward = layer.register_forward_hook(self._save_activation)
         self._backward = layer.register_full_backward_hook(self._save_gradient)
     def _save_activation(self, _m: nn.Module, _i: tuple[torch.Tensor, ...], output: torch.Tensor) -> None: self.activations = output
-    def _save_gradient(self, _m: nn.Module, _gi: tuple[torch.Tensor | None, ...], go: tuple[torch.Tensor | None, ...]) -> None: self.gradients = go[0]
+    def _save_gradient(self, _m: nn.Module, _gi: tuple[torch.Tensor | None, ...], go: tuple[torch.Tensor | None, ...]) -> None: self.gradients = go[0].detach() if go[0] is not None else None
     def close(self) -> None: self._forward.remove(); self._backward.remove()
     def __enter__(self) -> "GradCAM": return self
     def __exit__(self, *_: object) -> None: self.close()
     def __call__(self, tensor: torch.Tensor, output_size: tuple[int, int]) -> tuple[float, np.ndarray]:
-        self.activations = self.gradients = None; self.model.zero_grad(set_to_none=True)
-        logits = self.model(tensor).view(-1); logit = logits[0]; logit.backward()
-        if self.activations is None or self.gradients is None: raise ValueError("Grad-CAM hooks did not receive activations and gradients")
-        weights = self.gradients.mean(dim=(2, 3), keepdim=True); cam = F.relu((weights * self.activations).sum(1, keepdim=True))
-        cam = F.interpolate(cam, size=output_size, mode="bilinear", align_corners=False)[0, 0].detach().float().cpu().numpy()
+        if not tensor.is_floating_point(): raise TypeError("Grad-CAM classifier tensor must be floating point")
+        model_device = next(self.model.parameters(), tensor).device
+        if tensor.device != model_device: raise ValueError("Grad-CAM classifier tensor must be on the model device")
+        self.activations = self.gradients = None
+        # Disable an enclosing inference-mode context and create a normal leaf tensor.
+        with torch.inference_mode(False), torch.enable_grad():
+            grad_tensor = tensor.detach().clone().requires_grad_(True)
+            self.model.zero_grad(set_to_none=True)
+            logits = self.model(grad_tensor).view(-1); logit = logits[0]
+            if not logit.requires_grad:
+                raise RuntimeError("Grad-CAM logit does not require gradients; classifier forward pass must run with autograd enabled.")
+            if self.activations is None: raise RuntimeError("Grad-CAM target layer produced no activation")
+            if self.activations.ndim != 4 or not self.activations.requires_grad:
+                raise RuntimeError("Grad-CAM target activation must be a graph-connected 4D tensor [batch, channels, height, width]")
+            logit.backward()
+            if self.gradients is None: raise RuntimeError("Grad-CAM target layer produced no backward gradient")
+            if self.gradients.shape != self.activations.shape: raise RuntimeError("Grad-CAM activation and gradient shapes differ")
+            weights = self.gradients.mean(dim=(2, 3), keepdim=True); cam = F.relu((weights * self.activations).sum(1, keepdim=True))
+            probability = float(torch.sigmoid(logit.detach()).cpu())
+            cam = F.interpolate(cam, size=output_size, mode="bilinear", align_corners=False)[0, 0].detach().float().cpu().numpy()
+            self.model.zero_grad(set_to_none=True)
         low, high = float(cam.min()), float(cam.max())
         if not np.isfinite(cam).all() or high <= low: raise ValueError("Grad-CAM activation map is constant or unavailable")
-        return float(torch.sigmoid(logit.detach()).cpu()), (cam - low) / (high - low)
+        return probability, (cam - low) / (high - low)
 
 
 def paired_frame(cases: pd.DataFrame) -> pd.DataFrame:
@@ -292,6 +313,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
         frame = frame.iloc[0:0].copy()
     started = datetime.now(timezone.utc)
     states = {}
+    target_info: dict[str, dict[str, Any]] = {}
     for name, checkpoint in (("original", original_checkpoint), ("hard_masked", hard_masked_checkpoint)):
         state = torch.load(checkpoint, map_location="cpu", weights_only=False)
         if not isinstance(state, Mapping) or not isinstance(state.get("model_state_dict"), Mapping): raise ValueError(f"{name} checkpoint lacks model_state_dict")
@@ -299,11 +321,11 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
         if name == "original" and mode is not InputMode.ORIGINAL: raise ValueError("Original checkpoint does not declare original input mode")
         if name == "hard_masked" and mode is not InputMode.HARD_MASKED: raise ValueError("Hard-masked checkpoint does not declare hard_masked input mode")
         model = create_model(config["backbone"], pretrained=False); model.load_state_dict(state["model_state_dict"], strict=True); model.to(device).eval()
-        for parameter in model.parameters(): parameter.requires_grad_(False)
         _, transform = _transforms(int(config["classifier_image_size"]), str(config["preprocessing"]))
-        states[name] = (model, config, mode, transform, resolve_gradcam_target_layer(model))
+        layer = resolve_gradcam_target_layer(model); states[name] = (model, config, mode, transform, layer); target_info[name] = gradcam_target_metadata(model, layer)
     segmenter = FrozenLungSegmenter(segmentation_checkpoint, device)
     failures_path = output_directory / "rsna_gradcam_failures.csv"; processed = 0
+    if resume and failures_path.exists(): failures_path.unlink()
     qualitative: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]] = {"improved": [], "worsened": [], "both_well": [], "both_poor": []}
     for _, record in frame.iterrows():
         patient = str(record.patient_id)
@@ -321,6 +343,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
                 else: prepared = prepare_classifier_image(original, mode, output_size=int(config["classifier_image_size"]))
                 tensor = transform(prepared.convert("RGB")).unsqueeze(0).to(device)
                 with GradCAM(model, layer) as gradcam: probability, heatmap = gradcam(tensor, (height, width))
+                target_info[name] = gradcam_target_metadata(model, layer, tuple(gradcam.activations.shape) if gradcam.activations is not None else None)
                 values = localization_metrics(heatmap, lesion); predicted = int(probability >= .5)
                 current[name] = (values, heatmap)
                 row = {"patient_id": patient, "model": name, "input_mode": mode.value, "probability": probability, "predicted_class": predicted, "correct": int(predicted == 1), **values, "bounding_box_count": len(boxes[patient]), "lesion_area_pixels": int(lesion.sum()), "lesion_area_ratio": float(lesion.mean()), "image_width": width, "image_height": height}
@@ -353,7 +376,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
     plot_status = _plots_and_qualitative(output_directory, cases, paired); _save_qualitative_panel(output_directory, qualitative)
     report = {"population": "RSNA pneumonia-positive images with bounding boxes only", "completed_case_model_pairs": len(cases), "paired_patients": len(paired), "model_metric_means": {model: {metric: float(group[metric].mean()) for metric in METRICS} for model, group in cases.groupby("model")}, "bootstrap": boot.to_dict(orient="records"), "mcnemar_pointing_game": mcnemar, "plotting": plot_status}
     (output_directory / "rsna_gradcam_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    metadata = _metadata_base(**identity, original_checkpoint_path=str(original_checkpoint.resolve()), hard_masked_checkpoint_path=str(hard_masked_checkpoint.resolve()), segmentation_checkpoint_path=str(segmentation_checkpoint.resolve()), model_configurations={n: c for n, (_, c, _, _, _) in states.items()}, gradcam_target_layer={n: type(layer).__name__ for n, (_, _, _, _, layer) in states.items()}, device=device, batch_size=batch_size, num_workers=num_workers, completed_case_count=len(cases), failure_count=sum(1 for _ in open(failures_path, encoding="utf-8")) - 1 if failures_path.exists() else 0, mcnemar=mcnemar, localization_population="RSNA pneumonia-positive images with bounding boxes only", start_time=started.isoformat(), end_time=datetime.now(timezone.utc).isoformat(), python_version=platform.python_version(), pytorch_version=torch.__version__, pydicom_version=pydicom.__version__, git_commit=_git_commit())
+    metadata = _metadata_base(**identity, original_checkpoint_path=str(original_checkpoint.resolve()), hard_masked_checkpoint_path=str(hard_masked_checkpoint.resolve()), segmentation_checkpoint_path=str(segmentation_checkpoint.resolve()), model_configurations={n: c for n, (_, c, _, _, _) in states.items()}, gradcam_target_layer=target_info, device=device, batch_size=batch_size, num_workers=num_workers, completed_case_count=len(cases), failure_count=sum(1 for _ in open(failures_path, encoding="utf-8")) - 1 if failures_path.exists() else 0, mcnemar=mcnemar, localization_population="RSNA pneumonia-positive images with bounding boxes only", start_time=started.isoformat(), end_time=datetime.now(timezone.utc).isoformat(), python_version=platform.python_version(), pytorch_version=torch.__version__, pydicom_version=pydicom.__version__, git_commit=_git_commit())
     metadata_path.write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8"); create_archive(output_directory)
     return cases
 

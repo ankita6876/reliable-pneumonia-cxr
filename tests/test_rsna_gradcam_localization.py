@@ -55,6 +55,20 @@ def test_gradcam_shape_normalization_and_hook_cleanup_cpu():
     assert not layer._forward_hooks and not layer._backward_hooks
 
 
+def test_gradcam_reenables_autograd_inside_outer_inference_mode_and_preserves_weights():
+    model = TinyCNN().eval(); layer = resolve_gradcam_target_layer(model)
+    before = [parameter.detach().clone() for parameter in model.parameters()]
+    with torch.inference_mode():
+        input_tensor = torch.ones(1, 3, 8, 8)
+        with GradCAM(model, layer) as cam:
+            probability, heatmap = cam(input_tensor, (8, 8))
+            assert cam.activations is not None and cam.activations.requires_grad
+            assert cam.gradients is not None and cam.gradients.shape == cam.activations.shape
+    assert 0 <= probability <= 1 and np.isfinite(heatmap).all() and heatmap.min() == 0 and heatmap.max() == 1
+    assert all(torch.equal(old, new) for old, new in zip(before, model.parameters()))
+    assert all(parameter.grad is None for parameter in model.parameters())
+
+
 def test_target_layer_falls_back_to_last_convolution():
     model = nn.Sequential(nn.Conv2d(3, 2, 1), nn.ReLU(), nn.Conv2d(2, 1, 1))
     assert resolve_gradcam_target_layer(model) is model[2]
