@@ -62,11 +62,25 @@ def test_gradcam_reenables_autograd_inside_outer_inference_mode_and_preserves_we
         input_tensor = torch.ones(1, 3, 8, 8)
         with GradCAM(model, layer) as cam:
             probability, heatmap = cam(input_tensor, (8, 8))
-            assert cam.activations is not None and cam.activations.requires_grad
-            assert cam.gradients is not None and cam.gradients.shape == cam.activations.shape
+            assert cam.last_activation_shape == (1, 4, 8, 8)
+            assert cam.activations is None and cam.gradients is None
     assert 0 <= probability <= 1 and np.isfinite(heatmap).all() and heatmap.min() == 0 and heatmap.max() == 1
     assert all(torch.equal(old, new) for old, new in zip(before, model.parameters()))
     assert all(parameter.grad is None for parameter in model.parameters())
+
+
+def test_repeated_gradcam_calls_clear_hook_state_and_do_not_accumulate_hooks():
+    model = TinyCNN().eval(); layer = resolve_gradcam_target_layer(model)
+    forward_hooks, backward_hooks = len(layer._forward_hooks), len(layer._backward_hooks)
+    with GradCAM(model, layer) as cam:
+        for _ in range(4):
+            probability, heatmap = cam(torch.ones(1, 3, 8, 8), (8, 8))
+            assert isinstance(probability, float) and isinstance(heatmap, np.ndarray)
+            assert cam.activations is None and cam.gradients is None
+            assert all(parameter.grad is None for parameter in model.parameters())
+        assert len(layer._forward_hooks) == forward_hooks + 1
+        assert len(layer._backward_hooks) == backward_hooks + 1
+    assert len(layer._forward_hooks) == forward_hooks and len(layer._backward_hooks) == backward_hooks
 
 
 def test_target_layer_falls_back_to_last_convolution():

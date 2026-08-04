@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -43,6 +44,7 @@ MANIFEST_COLUMNS = ("patient_id", "image_path", "binary_target", "has_bounding_b
 BOX_COLUMNS = ("patient_id", "x", "y", "width", "height", "Target")
 CASE_COLUMNS = ("patient_id", "model", "input_mode", "probability", "predicted_class", "correct", "pointing_game_hit", "energy_inside_boxes", "heatmap_iou_0_5", "top10_energy_inside", "top20_energy_inside", "lesion_coverage_0_5", "activation_area_ratio_0_5", "bounding_box_count", "lesion_area_pixels", "lesion_area_ratio", "image_width", "image_height")
 METRICS = ("pointing_game_hit", "energy_inside_boxes", "heatmap_iou_0_5", "top10_energy_inside", "top20_energy_inside", "lesion_coverage_0_5", "activation_area_ratio_0_5")
+CUDA_CLEANUP_CADENCE = 100
 
 
 def filter_positive_boxed_manifest(manifest: Path, image_root: Path) -> pd.DataFrame:
@@ -133,7 +135,7 @@ def gradcam_target_metadata(model: nn.Module, layer: nn.Module, activation_shape
 
 class GradCAM:
     def __init__(self, model: nn.Module, layer: nn.Module) -> None:
-        self.model, self.layer, self.activations, self.gradients = model, layer, None, None
+        self.model, self.layer, self.activations, self.gradients, self.last_activation_shape = model, layer, None, None, None
         self._forward = layer.register_forward_hook(self._save_activation)
         self._backward = layer.register_full_backward_hook(self._save_gradient)
     def _save_activation(self, _m: nn.Module, _i: tuple[torch.Tensor, ...], output: torch.Tensor) -> None: self.activations = output
@@ -147,25 +149,30 @@ class GradCAM:
         if tensor.device != model_device: raise ValueError("Grad-CAM classifier tensor must be on the model device")
         self.activations = self.gradients = None
         # Disable an enclosing inference-mode context and create a normal leaf tensor.
-        with torch.inference_mode(False), torch.enable_grad():
-            grad_tensor = tensor.detach().clone().requires_grad_(True)
+        grad_tensor = logits = logit = activations = gradients = cam_tensor = None
+        try:
+            with torch.inference_mode(False), torch.enable_grad():
+                grad_tensor = tensor.detach().clone().requires_grad_(True)
+                self.model.zero_grad(set_to_none=True)
+                logits = self.model(grad_tensor).view(-1); logit = logits[0]
+                if not logit.requires_grad: raise RuntimeError("Grad-CAM logit does not require gradients; classifier forward pass must run with autograd enabled.")
+                activations = self.activations
+                if activations is None: raise RuntimeError("Grad-CAM target layer produced no activation")
+                if activations.ndim != 4 or not activations.requires_grad: raise RuntimeError("Grad-CAM target activation must be a graph-connected 4D tensor [batch, channels, height, width]")
+                self.last_activation_shape = tuple(activations.shape); logit.backward()
+                gradients = self.gradients
+                if gradients is None: raise RuntimeError("Grad-CAM target layer produced no backward gradient")
+                if gradients.shape != activations.shape: raise RuntimeError("Grad-CAM activation and gradient shapes differ")
+                weights = gradients.mean(dim=(2, 3), keepdim=True); cam_tensor = F.relu((weights * activations).sum(1, keepdim=True))
+                probability = float(torch.sigmoid(logit.detach()).cpu().item())
+                cam = F.interpolate(cam_tensor, size=output_size, mode="bilinear", align_corners=False)[0, 0].detach().float().cpu().numpy()
+            low, high = float(cam.min()), float(cam.max())
+            if not np.isfinite(cam).all() or high <= low: raise ValueError("Grad-CAM activation map is constant or unavailable")
+            return probability, (cam - low) / (high - low)
+        finally:
             self.model.zero_grad(set_to_none=True)
-            logits = self.model(grad_tensor).view(-1); logit = logits[0]
-            if not logit.requires_grad:
-                raise RuntimeError("Grad-CAM logit does not require gradients; classifier forward pass must run with autograd enabled.")
-            if self.activations is None: raise RuntimeError("Grad-CAM target layer produced no activation")
-            if self.activations.ndim != 4 or not self.activations.requires_grad:
-                raise RuntimeError("Grad-CAM target activation must be a graph-connected 4D tensor [batch, channels, height, width]")
-            logit.backward()
-            if self.gradients is None: raise RuntimeError("Grad-CAM target layer produced no backward gradient")
-            if self.gradients.shape != self.activations.shape: raise RuntimeError("Grad-CAM activation and gradient shapes differ")
-            weights = self.gradients.mean(dim=(2, 3), keepdim=True); cam = F.relu((weights * self.activations).sum(1, keepdim=True))
-            probability = float(torch.sigmoid(logit.detach()).cpu())
-            cam = F.interpolate(cam, size=output_size, mode="bilinear", align_corners=False)[0, 0].detach().float().cpu().numpy()
-            self.model.zero_grad(set_to_none=True)
-        low, high = float(cam.min()), float(cam.max())
-        if not np.isfinite(cam).all() or high <= low: raise ValueError("Grad-CAM activation map is constant or unavailable")
-        return probability, (cam - low) / (high - low)
+            self.activations = self.gradients = None
+            del grad_tensor, logits, logit, activations, gradients, cam_tensor
 
 
 def paired_frame(cases: pd.DataFrame) -> pd.DataFrame:
@@ -201,6 +208,17 @@ def _append_csv(path: Path, row: dict[str, Any], columns: tuple[str, ...]) -> No
 
 
 def _metadata_base(**values: Any) -> dict[str, Any]: return values
+
+
+def _cuda_memory_gb() -> dict[str, float]:
+    if not torch.cuda.is_available(): return {}
+    return {"allocated_gb": torch.cuda.memory_allocated() / 2**30, "reserved_gb": torch.cuda.memory_reserved() / 2**30, "peak_allocated_gb": torch.cuda.max_memory_allocated() / 2**30}
+
+
+def _release_cuda_memory(*models: nn.Module) -> None:
+    for model in models: model.zero_grad(set_to_none=True)
+    gc.collect()
+    if torch.cuda.is_available(): torch.cuda.empty_cache()
 
 
 def _plot_ready_cases(cases: pd.DataFrame, metric: str) -> tuple[pd.DataFrame | None, str | None]:
@@ -283,9 +301,10 @@ def create_archive(output: Path) -> Path:
     return archive
 
 
-def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, original_checkpoint: Path, hard_masked_checkpoint: Path, segmentation_checkpoint: Path | None, image_root: Path, output_directory: Path, device: str = "cpu", batch_size: int = 1, num_workers: int = 0, max_samples: int | None = None, seed: int = 42, overwrite: bool = False, resume: bool = False) -> pd.DataFrame:
+def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, original_checkpoint: Path, hard_masked_checkpoint: Path, segmentation_checkpoint: Path | None, image_root: Path, output_directory: Path, device: str = "cpu", batch_size: int = 1, num_workers: int = 0, max_samples: int | None = None, seed: int = 42, overwrite: bool = False, resume: bool = False, retry_failures: bool = True) -> pd.DataFrame:
     if device not in {"cpu", "cuda"}: raise ValueError("device must be cpu or cuda")
     if device == "cuda" and not torch.cuda.is_available(): raise ValueError("CUDA requested but is not available")
+    if device == "cuda": torch.cuda.reset_peak_memory_stats()
     if batch_size < 1 or num_workers < 0: raise ValueError("batch_size must be positive and num_workers non-negative")
     for path in (original_checkpoint, hard_masked_checkpoint):
         if not path.is_file(): raise FileNotFoundError(f"Classifier checkpoint does not exist: {path}")
@@ -298,6 +317,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
     frame = deterministic_patient_sample(filter_positive_boxed_manifest(manifest, image_root), max_samples, seed)
     boxes = read_boxes(bounding_boxes, set(frame.patient_id))
     identity = {"manifest_path": str(manifest.resolve()), "bounding_box_path": str(bounding_boxes.resolve()), "original_checkpoint_sha256": _sha256(original_checkpoint), "hard_masked_checkpoint_sha256": _sha256(hard_masked_checkpoint), "segmentation_checkpoint_sha256": _sha256(segmentation_checkpoint), "seed": seed, "max_samples": max_samples, "selected_patient_ids": frame.patient_id.tolist()}
+    expected_pairs = 2 * len(frame)
     completed: set[tuple[str, str]] = set()
     if resume and metrics_path.exists():
         old = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
@@ -325,7 +345,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
         layer = resolve_gradcam_target_layer(model); states[name] = (model, config, mode, transform, layer); target_info[name] = gradcam_target_metadata(model, layer)
     segmenter = FrozenLungSegmenter(segmentation_checkpoint, device)
     failures_path = output_directory / "rsna_gradcam_failures.csv"; processed = 0
-    if resume and failures_path.exists(): failures_path.unlink()
+    if resume and retry_failures and failures_path.exists(): failures_path.unlink()
     qualitative: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]] = {"improved": [], "worsened": [], "both_well": [], "both_poor": []}
     for _, record in frame.iterrows():
         patient = str(record.patient_id)
@@ -336,6 +356,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
         probability_mask = None; current: dict[str, tuple[dict[str, float], np.ndarray]] = {}
         for name, (model, config, mode, transform, layer) in states.items():
             if (patient, name) in completed: continue
+            tensor = prepared = heatmap = None; oom_error = False
             try:
                 if mode is InputMode.HARD_MASKED:
                     if probability_mask is None: probability_mask = segmenter.predict_proba(original)  # exactly once per case
@@ -343,12 +364,20 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
                 else: prepared = prepare_classifier_image(original, mode, output_size=int(config["classifier_image_size"]))
                 tensor = transform(prepared.convert("RGB")).unsqueeze(0).to(device)
                 with GradCAM(model, layer) as gradcam: probability, heatmap = gradcam(tensor, (height, width))
-                target_info[name] = gradcam_target_metadata(model, layer, tuple(gradcam.activations.shape) if gradcam.activations is not None else None)
+                target_info[name] = gradcam_target_metadata(model, layer, gradcam.last_activation_shape)
                 values = localization_metrics(heatmap, lesion); predicted = int(probability >= .5)
                 current[name] = (values, heatmap)
                 row = {"patient_id": patient, "model": name, "input_mode": mode.value, "probability": probability, "predicted_class": predicted, "correct": int(predicted == 1), **values, "bounding_box_count": len(boxes[patient]), "lesion_area_pixels": int(lesion.sum()), "lesion_area_ratio": float(lesion.mean()), "image_width": width, "image_height": height}
                 _append_csv(metrics_path, row, CASE_COLUMNS); completed.add((patient, name)); processed += 1
-            except Exception as error: _append_csv(failures_path, {"patient_id": patient, "model": name, "reason": str(error)}, ("patient_id", "model", "reason"))
+            except Exception as error:
+                oom_error = isinstance(error, torch.cuda.OutOfMemoryError)
+                _append_csv(failures_path, {"patient_id": patient, "model": name, "reason": str(error)}, ("patient_id", "model", "reason"))
+            finally:
+                model.zero_grad(set_to_none=True)
+                if device == "cuda": torch.cuda.synchronize()
+                del tensor, prepared, heatmap
+                if oom_error: _release_cuda_memory(model)
+        del probability_mask
         if set(current) == {"original", "hard_masked"}:
             original_values, original_heatmap = current["original"]; masked_values, masked_heatmap = current["hard_masked"]
             delta = masked_values["heatmap_iou_0_5"] - original_values["heatmap_iou_0_5"]
@@ -360,7 +389,10 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
                 display_original = np.asarray(Image.fromarray(original_heatmap).resize(display_size, Image.Resampling.BILINEAR))
                 display_masked = np.asarray(Image.fromarray(masked_heatmap).resize(display_size, Image.Resampling.BILINEAR))
                 qualitative[group].append((display_image, display_lesion, display_original, display_masked, f"{patient}: {group}"))
-        if processed and processed % 100 == 0: print(f"Saved {processed} case-model results", flush=True)
+        if processed and processed % CUDA_CLEANUP_CADENCE == 0:
+            if device == "cuda":
+                memory = _cuda_memory_gb(); print(f"Saved {processed} case-model results\nCUDA allocated: {memory['allocated_gb']:.2f} GB\nCUDA reserved: {memory['reserved_gb']:.2f} GB", flush=True); _release_cuda_memory(*(state[0] for state in states.values()))
+            else: print(f"Saved {processed} case-model results", flush=True)
     cases = pd.read_csv(metrics_path) if metrics_path.exists() else pd.DataFrame(columns=CASE_COLUMNS)
     if cases.duplicated(["patient_id", "model"]).any(): raise ValueError("Duplicate patient-model rows detected")
     paired = paired_frame(cases)
@@ -374,9 +406,17 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
     boot.to_csv(output_directory / "rsna_gradcam_bootstrap_comparison.csv", index=False)
     summary = cases.groupby("model")[list(METRICS) + ["probability", "correct"]].agg(["mean", "count"]); summary.to_csv(output_directory / "rsna_gradcam_model_summary.csv")
     plot_status = _plots_and_qualitative(output_directory, cases, paired); _save_qualitative_panel(output_directory, qualitative)
-    report = {"population": "RSNA pneumonia-positive images with bounding boxes only", "completed_case_model_pairs": len(cases), "paired_patients": len(paired), "model_metric_means": {model: {metric: float(group[metric].mean()) for metric in METRICS} for model, group in cases.groupby("model")}, "bootstrap": boot.to_dict(orient="records"), "mcnemar_pointing_game": mcnemar, "plotting": plot_status}
+    successful = set(zip(cases.patient_id.astype(str), cases.model.astype(str)))
+    failure_rows = pd.read_csv(failures_path) if failures_path.exists() else pd.DataFrame(columns=("patient_id", "model", "reason"))
+    if not failure_rows.empty:
+        failure_rows.patient_id = failure_rows.patient_id.astype(str); failure_rows = failure_rows.loc[~failure_rows.apply(lambda row: (row.patient_id, row.model) in successful, axis=1)].drop_duplicates(["patient_id", "model"], keep="last")
+        failure_rows.to_csv(failures_path, index=False)
+    failed_pairs = len(failure_rows); successful_pairs = len(successful); missing_pairs = max(0, expected_pairs - successful_pairs); completion = successful_pairs / expected_pairs if expected_pairs else 1.0
+    completion_status = {"expected_pairs": expected_pairs, "successful_pairs": successful_pairs, "failed_pairs": failed_pairs, "missing_pairs": missing_pairs, "completion_fraction": completion, "status": "complete" if completion == 1 else "partial"}
+    if completion < 1: print(f"WARNING: Grad-CAM localization is partial: {successful_pairs}/{expected_pairs} successful case-model pairs; resume to retry failures.", flush=True)
+    report = {"population": "RSNA pneumonia-positive images with bounding boxes only", "completed_case_model_pairs": len(cases), "paired_patients": len(paired), "model_metric_means": {model: {metric: float(group[metric].mean()) for metric in METRICS} for model, group in cases.groupby("model")}, "bootstrap": boot.to_dict(orient="records"), "mcnemar_pointing_game": mcnemar, "plotting": plot_status, "completion": completion_status}
     (output_directory / "rsna_gradcam_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    metadata = _metadata_base(**identity, original_checkpoint_path=str(original_checkpoint.resolve()), hard_masked_checkpoint_path=str(hard_masked_checkpoint.resolve()), segmentation_checkpoint_path=str(segmentation_checkpoint.resolve()), model_configurations={n: c for n, (_, c, _, _, _) in states.items()}, gradcam_target_layer=target_info, device=device, batch_size=batch_size, num_workers=num_workers, completed_case_count=len(cases), failure_count=sum(1 for _ in open(failures_path, encoding="utf-8")) - 1 if failures_path.exists() else 0, mcnemar=mcnemar, localization_population="RSNA pneumonia-positive images with bounding boxes only", start_time=started.isoformat(), end_time=datetime.now(timezone.utc).isoformat(), python_version=platform.python_version(), pytorch_version=torch.__version__, pydicom_version=pydicom.__version__, git_commit=_git_commit())
+    metadata = _metadata_base(**identity, original_checkpoint_path=str(original_checkpoint.resolve()), hard_masked_checkpoint_path=str(hard_masked_checkpoint.resolve()), segmentation_checkpoint_path=str(segmentation_checkpoint.resolve()), model_configurations={n: c for n, (_, c, _, _, _) in states.items()}, gradcam_target_layer=target_info, device=device, batch_size=batch_size, num_workers=num_workers, completed_case_count=len(cases), failure_count=failed_pairs, completion=completion_status, cuda_memory=_cuda_memory_gb(), mcnemar=mcnemar, localization_population="RSNA pneumonia-positive images with bounding boxes only", start_time=started.isoformat(), end_time=datetime.now(timezone.utc).isoformat(), python_version=platform.python_version(), pytorch_version=torch.__version__, pydicom_version=pydicom.__version__, git_commit=_git_commit())
     metadata_path.write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8"); create_archive(output_directory)
     return cases
 
@@ -384,7 +424,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     for arg in ("manifest", "bounding_boxes", "original_checkpoint", "hard_masked_checkpoint", "segmentation_checkpoint", "image_root", "output_directory"): p.add_argument("--" + arg.replace("_", "-"), required=True, type=Path)
-    p.add_argument("--device", choices=("cpu", "cuda"), default="cuda" if torch.cuda.is_available() else "cpu"); p.add_argument("--batch-size", type=int, default=1); p.add_argument("--num-workers", type=int, default=0); p.add_argument("--max-samples", type=int); p.add_argument("--seed", type=int, default=42); p.add_argument("--overwrite", action="store_true"); p.add_argument("--resume", action="store_true")
+    p.add_argument("--device", choices=("cpu", "cuda"), default="cuda" if torch.cuda.is_available() else "cpu"); p.add_argument("--batch-size", type=int, default=1); p.add_argument("--num-workers", type=int, default=0); p.add_argument("--max-samples", type=int); p.add_argument("--seed", type=int, default=42); p.add_argument("--overwrite", action="store_true"); p.add_argument("--resume", action="store_true"); p.add_argument("--retry-failures", action="store_true", default=True)
     return p.parse_args(argv)
 
 
