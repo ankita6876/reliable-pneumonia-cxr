@@ -20,6 +20,11 @@ from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
+import matplotlib
+
+# This evaluator is also run on Kaggle/CI and must never require a display server.
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 import pydicom
 import torch
@@ -62,6 +67,11 @@ def deterministic_patient_sample(frame: pd.DataFrame, max_samples: int | None, s
     ids = np.asarray(sorted(frame.patient_id.astype(str).unique()))
     selected = set(np.random.default_rng(seed).choice(ids, max_samples, replace=False).tolist())
     return frame.loc[frame.patient_id.isin(selected)].sort_values("patient_id").copy()
+
+
+def resume_is_complete(completed: set[tuple[str, str]], selected_case_count: int) -> bool:
+    """Whether resume can rebuild artifacts without entering Grad-CAM inference."""
+    return selected_case_count >= 0 and len(completed) == 2 * selected_case_count
 
 
 def read_boxes(path: Path, selected_ids: set[str]) -> dict[str, list[tuple[float, float, float, float]]]:
@@ -172,25 +182,64 @@ def _append_csv(path: Path, row: dict[str, Any], columns: tuple[str, ...]) -> No
 def _metadata_base(**values: Any) -> dict[str, Any]: return values
 
 
-def _plots_and_qualitative(output: Path, cases: pd.DataFrame, paired: pd.DataFrame) -> None:
-    import matplotlib.pyplot as plt
+def _plot_ready_cases(cases: pd.DataFrame, metric: str) -> tuple[pd.DataFrame | None, str | None]:
+    if cases.empty: return None, "case metrics are empty"
+    if "model" not in cases or metric not in cases: return None, f"missing required column(s) for {metric}"
+    subset = cases.loc[cases.model.isin(("original", "hard_masked")), ["model", metric]].copy()
+    subset[metric] = pd.to_numeric(subset[metric], errors="coerce")
+    subset = subset.loc[np.isfinite(subset[metric])]
+    if set(subset.model) != {"original", "hard_masked"}: return None, "both original and hard_masked finite model groups are required"
+    return subset, None
+
+
+def _plots_and_qualitative(output: Path, cases: pd.DataFrame, paired: pd.DataFrame) -> dict[str, Any]:
+    outcome: dict[str, Any] = {"skipped_metrics": {}, "skipped_figures": {}}
     for metric, name in (("pointing_game_hit", "pointing_game_comparison"), ("energy_inside_boxes", "energy_inside_boxes_comparison"), ("heatmap_iou_0_5", "heatmap_iou_comparison")):
-        fig, ax = plt.subplots(figsize=(4, 4)); values = [cases.loc[cases.model == m, metric] for m in ("original", "hard_masked")]
+        ready, reason = _plot_ready_cases(cases, metric)
+        if ready is None: outcome["skipped_figures"][name] = reason; continue
+        fig, ax = plt.subplots(figsize=(4, 4)); values = [ready.loc[ready.model == m, metric].to_numpy() for m in ("original", "hard_masked")]
         ax.boxplot(values, tick_labels=["Original", "Hard-masked"]); ax.set_ylabel(metric); fig.tight_layout()
+        if max(map(len, values)) <= 32:
+            for position, values_at_position in enumerate(values, 1): ax.scatter(np.full(len(values_at_position), position), values_at_position, color="black", s=12, alpha=.65, zorder=3)
         for suffix in ("png", "pdf"): fig.savefig(output / f"{name}.{suffix}", dpi=300)
         plt.close(fig)
-    fig, ax = plt.subplots(figsize=(7, 4)); means = [paired[f"{m}_hard_masked"].sub(paired[f"{m}_original"]).mean() for m in METRICS]
-    ax.errorbar(means, range(len(METRICS)), xerr=0, fmt="o"); ax.axvline(0, color="black"); ax.set_yticks(range(len(METRICS)), METRICS); fig.tight_layout()
-    for suffix in ("png", "pdf"): fig.savefig(output / f"paired_localization_difference_forest.{suffix}", dpi=300)
-    plt.close(fig)
-    fig, ax = plt.subplots(figsize=(9, 4)); cases.boxplot(column=list(METRICS), by="model", ax=ax, rot=45); plt.suptitle(""); fig.tight_layout()
-    for suffix in ("png", "pdf"): fig.savefig(output / f"localization_metric_distributions.{suffix}", dpi=300)
-    plt.close(fig)
+    available = [m for m in METRICS if f"{m}_original" in paired and f"{m}_hard_masked" in paired and np.isfinite(pd.to_numeric(paired[f"{m}_original"], errors="coerce")).any() and np.isfinite(pd.to_numeric(paired[f"{m}_hard_masked"], errors="coerce")).any()]
+    if available:
+        fig, ax = plt.subplots(figsize=(7, 4)); means = [pd.to_numeric(paired[f"{m}_hard_masked"], errors="coerce").sub(pd.to_numeric(paired[f"{m}_original"], errors="coerce")).mean() for m in available]
+        ax.errorbar(means, range(len(available)), xerr=0, fmt="o"); ax.axvline(0, color="black"); ax.set_yticks(range(len(available)), available); fig.tight_layout()
+        for suffix in ("png", "pdf"): fig.savefig(output / f"paired_localization_difference_forest.{suffix}", dpi=300)
+        plt.close(fig)
+    else: outcome["skipped_figures"]["paired_localization_difference_forest"] = "no finite paired localization metrics"
+    long_rows = []
+    for metric in METRICS:
+        ready, reason = _plot_ready_cases(cases, metric)
+        if ready is None: outcome["skipped_metrics"][metric] = reason; continue
+        low, high = ready[metric].min(), ready[metric].max()
+        for model in ("original", "hard_masked"):
+            values = ready.loc[ready.model == model, metric].to_numpy(float)
+            # Visualization-only min/max normalization permits a single combined axis.
+            normalized = np.zeros_like(values) if high == low else (values - low) / (high - low)
+            long_rows.extend({"metric": metric, "model": model, "value": value} for value in normalized)
+    if long_rows:
+        long = pd.DataFrame(long_rows, columns=("metric", "model", "value")); labels = list(dict.fromkeys(long.metric)); fig, ax = plt.subplots(figsize=(max(9, len(labels) * 1.25), 4))
+        positions, values, colors, tick_positions = [], [], [], []
+        for index, metric in enumerate(labels):
+            base = index * 3; tick_positions.append(base + .5)
+            for offset, (model, color) in enumerate((("original", "#4c78a8"), ("hard_masked", "#f58518"))):
+                positions.append(base + offset); values.append(long.loc[(long.metric == metric) & (long.model == model), "value"].to_numpy()); colors.append(color)
+        boxes = ax.boxplot(values, positions=positions, widths=.7, patch_artist=True)
+        for patch, color in zip(boxes["boxes"], colors): patch.set_facecolor(color)
+        if max(map(len, values)) <= 32:
+            for position, observed, color in zip(positions, values, colors): ax.scatter(np.full(len(observed), position), observed, color=color, edgecolors="black", s=16, alpha=.75, zorder=3)
+        ax.set_xticks(tick_positions, labels, rotation=45, ha="right"); ax.set_ylabel("Within-metric normalized value (visualization only)"); ax.legend([boxes["boxes"][0], boxes["boxes"][1]], ["Original", "Hard-masked"]); fig.tight_layout()
+        for suffix in ("png", "pdf"): fig.savefig(output / f"localization_metric_distributions.{suffix}", dpi=300)
+        plt.close(fig)
+    else: outcome["skipped_figures"]["localization_metric_distributions"] = "no plottable localization metrics"
+    return outcome
 
 
 def _save_qualitative_panel(output: Path, candidates: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]]) -> None:
     """Save at most twelve display-sized overlays; no per-case image files are retained."""
-    import matplotlib.pyplot as plt
     chosen = [item for group in candidates.values() for item in group[:3]]
     if not chosen: return
     fig, axes = plt.subplots(len(chosen), 3, figsize=(9, 3 * len(chosen)))
@@ -237,6 +286,10 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
     # Persist identity before expensive model work: an interrupted Kaggle run is resumable.
     if not resume:
         metadata_path.write_text(json.dumps({**identity, "status": "in_progress"}, indent=2), encoding="utf-8")
+    # A complete interrupted run needs only reporting work.  Keep the selected identity
+    # above, but make the inference loop empty so Grad-CAM is never recomputed.
+    if resume and resume_is_complete(completed, len(frame)):
+        frame = frame.iloc[0:0].copy()
     started = datetime.now(timezone.utc)
     states = {}
     for name, checkpoint in (("original", original_checkpoint), ("hard_masked", hard_masked_checkpoint)):
@@ -297,9 +350,9 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
     boot = bootstrap_comparison(paired); mcnemar = exact_mcnemar(paired.pointing_game_hit_original.to_numpy(), paired.pointing_game_hit_hard_masked.to_numpy()) if len(paired) else {}
     boot.to_csv(output_directory / "rsna_gradcam_bootstrap_comparison.csv", index=False)
     summary = cases.groupby("model")[list(METRICS) + ["probability", "correct"]].agg(["mean", "count"]); summary.to_csv(output_directory / "rsna_gradcam_model_summary.csv")
-    report = {"population": "RSNA pneumonia-positive images with bounding boxes only", "completed_case_model_pairs": len(cases), "paired_patients": len(paired), "model_metric_means": {model: {metric: float(group[metric].mean()) for metric in METRICS} for model, group in cases.groupby("model")}, "bootstrap": boot.to_dict(orient="records"), "mcnemar_pointing_game": mcnemar}
+    plot_status = _plots_and_qualitative(output_directory, cases, paired); _save_qualitative_panel(output_directory, qualitative)
+    report = {"population": "RSNA pneumonia-positive images with bounding boxes only", "completed_case_model_pairs": len(cases), "paired_patients": len(paired), "model_metric_means": {model: {metric: float(group[metric].mean()) for metric in METRICS} for model, group in cases.groupby("model")}, "bootstrap": boot.to_dict(orient="records"), "mcnemar_pointing_game": mcnemar, "plotting": plot_status}
     (output_directory / "rsna_gradcam_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    _plots_and_qualitative(output_directory, cases, paired); _save_qualitative_panel(output_directory, qualitative)
     metadata = _metadata_base(**identity, original_checkpoint_path=str(original_checkpoint.resolve()), hard_masked_checkpoint_path=str(hard_masked_checkpoint.resolve()), segmentation_checkpoint_path=str(segmentation_checkpoint.resolve()), model_configurations={n: c for n, (_, c, _, _, _) in states.items()}, gradcam_target_layer={n: type(layer).__name__ for n, (_, _, _, _, layer) in states.items()}, device=device, batch_size=batch_size, num_workers=num_workers, completed_case_count=len(cases), failure_count=sum(1 for _ in open(failures_path, encoding="utf-8")) - 1 if failures_path.exists() else 0, mcnemar=mcnemar, localization_population="RSNA pneumonia-positive images with bounding boxes only", start_time=started.isoformat(), end_time=datetime.now(timezone.utc).isoformat(), python_version=platform.python_version(), pytorch_version=torch.__version__, pydicom_version=pydicom.__version__, git_commit=_git_commit())
     metadata_path.write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8"); create_archive(output_directory)
     return cases

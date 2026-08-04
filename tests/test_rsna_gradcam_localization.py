@@ -4,6 +4,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,7 +16,7 @@ from torch import nn
 from scripts.analysis.evaluate_rsna_gradcam_localization import (
     GradCAM, bootstrap_comparison, create_archive, deterministic_patient_sample,
     exact_mcnemar, filter_positive_boxed_manifest, localization_metrics, paired_frame,
-    resolve_gradcam_target_layer, union_box_mask,
+    resolve_gradcam_target_layer, union_box_mask, _plots_and_qualitative, resume_is_complete,
 )
 
 
@@ -91,3 +94,34 @@ def test_resume_metadata_compatibility_logic(tmp_path: Path):
     # The evaluator exposes strict identity metadata; this compact check guards its persisted schema.
     meta = {"seed": 42, "selected_patient_ids": ["a"]}; path = tmp_path / "meta.json"; path.write_text(json.dumps(meta))
     assert json.loads(path.read_text())["seed"] == 42
+
+
+def _plot_cases() -> pd.DataFrame:
+    rows = []
+    for model, offset in (("original", 0.0), ("hard_masked", .2)):
+        for patient in range(3):
+            rows.append({"patient_id": str(patient), "model": model, **{metric: min(1., offset + patient / 4) for metric in ("pointing_game_hit", "energy_inside_boxes", "heatmap_iou_0_5", "top10_energy_inside", "top20_energy_inside", "lesion_coverage_0_5", "activation_area_ratio_0_5")}})
+    return pd.DataFrame(rows)
+
+
+def test_matplotlib_distribution_plots_multiple_metrics_and_outputs(tmp_path: Path):
+    cases = _plot_cases(); paired = paired_frame(cases)
+    result = _plots_and_qualitative(tmp_path, cases, paired)
+    assert not result["skipped_metrics"]
+    assert (tmp_path / "localization_metric_distributions.png").is_file()
+    assert (tmp_path / "localization_metric_distributions.pdf").is_file()
+
+
+def test_plotting_empty_nan_and_missing_model_are_safe(tmp_path: Path):
+    result = _plots_and_qualitative(tmp_path, pd.DataFrame(), pd.DataFrame())
+    assert "localization_metric_distributions" in result["skipped_figures"]
+    cases = _plot_cases(); cases["heatmap_iou_0_5"] = np.nan
+    result = _plots_and_qualitative(tmp_path, cases, paired_frame(cases))
+    assert "heatmap_iou_0_5" in result["skipped_metrics"]
+    result = _plots_and_qualitative(tmp_path, cases.loc[cases.model == "original"], pd.DataFrame())
+    assert "pointing_game_comparison" in result["skipped_figures"]
+
+
+def test_complete_resume_skips_gradcam_inference_decision():
+    assert resume_is_complete({("a", "original"), ("a", "hard_masked")}, 1)
+    assert not resume_is_complete({("a", "original")}, 1)
