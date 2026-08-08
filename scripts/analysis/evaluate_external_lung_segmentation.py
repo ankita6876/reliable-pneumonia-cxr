@@ -43,7 +43,8 @@ from pneumonia_ai.segmentation.mask_utils import (
 
 HISTORICAL_CHECKPOINT_SHA256 = "bdcbb77d4872292721a5bce8328401274d1b7d917e5e413f173873c8cf886a1d"
 MASK_THRESHOLD = 0.5
-CASE_ID_RE = re.compile(r"(?<![A-Z0-9])(JPCLN\d{3})(?![A-Z0-9])", re.IGNORECASE)
+COMBINED_GT_MASK_THRESHOLD = 128
+CASE_ID_RE = re.compile(r"(?<![A-Z0-9])(JPC[LN]N\d{3})(?![A-Z0-9])", re.IGNORECASE)
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
 
@@ -57,6 +58,7 @@ class CaseMapping:
     right_mask_path: Path | None
     mapping_status: str
     notes: str = ""
+    combined_mask_path: Path | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,9 +66,14 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--images-root", type=Path, required=True)
-    parser.add_argument("--masks-root", type=Path, required=True)
+    parser.add_argument("--masks-root", type=Path)
     parser.add_argument("--left-masks-root", type=Path)
     parser.add_argument("--right-masks-root", type=Path)
+    parser.add_argument(
+        "--combined-masks-root",
+        type=Path,
+        help="JSRT mirror directory containing one resized grayscale combined lung mask per case.",
+    )
     parser.add_argument(
         "--mapping-csv",
         type=Path,
@@ -112,7 +119,7 @@ def verify_checkpoint_sha256(path: Path, expected: str) -> str:
 
 
 def case_id_from_path(path: Path) -> str | None:
-    """Extract a canonical JSRT ID only when its explicit JPCLN form is present."""
+    """Extract a canonical JPCLN/JPCNN JSRT ID when explicitly present."""
 
     match = CASE_ID_RE.search(path.stem)
     return match.group(1).upper() if match else None
@@ -183,11 +190,12 @@ def _resolve_csv_path(value: str, root: Path) -> Path:
 
 def discover_mappings(
     images_root: Path,
-    masks_root: Path,
+    masks_root: Path | None,
     *,
     left_masks_root: Path | None = None,
     right_masks_root: Path | None = None,
     mapping_csv: Path | None = None,
+    combined_masks_root: Path | None = None,
 ) -> list[CaseMapping]:
     """Create auditable mappings without trusting arbitrary filename similarity.
 
@@ -196,6 +204,10 @@ def discover_mappings(
     A reviewed mapping CSV is available for a differently structured mirror.
     """
 
+    if combined_masks_root is not None:
+        return _discover_combined_mappings(images_root, combined_masks_root)
+    if masks_root is None:
+        raise ValueError("--masks-root is required for separate left/right or mapping-CSV mask modes.")
     if mapping_csv is not None:
         return _mapping_from_csv(mapping_csv, images_root, masks_root)
     image_index, unrecognized_images = _index_paths([path for path in _files(images_root) if path.suffix.lower() in IMAGE_SUFFIXES])
@@ -220,12 +232,46 @@ def discover_mappings(
         status = "mapped" if not issues else ("ambiguous" if any("duplicate" in issue for issue in issues) else "missing_file")
         mappings.append(CaseMapping(case_id, images[0] if len(images) == 1 else None, lefts[0] if len(lefts) == 1 else None, rights[0] if len(rights) == 1 else None, status, "; ".join(issues)))
     for path in unrecognized_images:
-        mappings.append(CaseMapping("", path, None, None, "unrecognized_case_id", "image path lacks canonical JPCLN### ID"))
+        mappings.append(CaseMapping("", path, None, None, "unrecognized_case_id", "image path lacks canonical JPCLN### or JPCNN### ID"))
     for path in unrecognized_left:
-        mappings.append(CaseMapping("", None, path, None, "unrecognized_case_id", "left-mask path lacks canonical JPCLN### ID"))
+        mappings.append(CaseMapping("", None, path, None, "unrecognized_case_id", "left-mask path lacks canonical JSRT ID"))
     for path in unrecognized_right:
-        mappings.append(CaseMapping("", None, None, path, "unrecognized_case_id", "right-mask path lacks canonical JPCLN### ID"))
+        mappings.append(CaseMapping("", None, None, path, "unrecognized_case_id", "right-mask path lacks canonical JSRT ID"))
     return sorted(mappings, key=lambda item: (item.case_id, str(item.image_path or item.left_mask_path or item.right_mask_path)))
+
+
+def _discover_combined_mappings(images_root: Path, combined_masks_root: Path) -> list[CaseMapping]:
+    """Map one resized grayscale combined mask to each canonical JSRT image ID."""
+
+    image_index, unrecognized_images = _index_paths(
+        [path for path in _files(images_root) if path.suffix.lower() in IMAGE_SUFFIXES]
+    )
+    mask_index, unrecognized_masks = _index_paths(
+        [path for path in _files(combined_masks_root) if path.suffix.lower() in IMAGE_SUFFIXES]
+    )
+    mappings: list[CaseMapping] = []
+    for case_id in sorted(set(image_index) | set(mask_index)):
+        images, masks = image_index.get(case_id, []), mask_index.get(case_id, [])
+        issues: list[str] = []
+        if len(images) != 1:
+            issues.append("missing image" if not images else f"duplicate images ({len(images)})")
+        if len(masks) != 1:
+            issues.append("missing combined mask" if not masks else f"duplicate combined masks ({len(masks)})")
+        status = "mapped" if not issues else ("ambiguous" if any("duplicate" in issue for issue in issues) else "missing_file")
+        mappings.append(CaseMapping(
+            case_id,
+            images[0] if len(images) == 1 else None,
+            None,
+            None,
+            status,
+            "; ".join(issues),
+            masks[0] if len(masks) == 1 else None,
+        ))
+    for path in unrecognized_images:
+        mappings.append(CaseMapping("", path, None, None, "unrecognized_case_id", "image path lacks canonical JSRT ID"))
+    for path in unrecognized_masks:
+        mappings.append(CaseMapping("", None, None, None, "unrecognized_case_id", "combined-mask path lacks canonical JSRT ID", path))
+    return sorted(mappings, key=lambda item: (item.case_id, str(item.image_path or item.combined_mask_path)))
 
 
 def mapping_frame(mappings: list[CaseMapping]) -> pd.DataFrame:
@@ -236,6 +282,7 @@ def mapping_frame(mappings: list[CaseMapping]) -> pd.DataFrame:
         "image_path": str(item.image_path) if item.image_path else "",
         "left_mask_path": str(item.left_mask_path) if item.left_mask_path else "",
         "right_mask_path": str(item.right_mask_path) if item.right_mask_path else "",
+        "combined_mask_path": str(item.combined_mask_path) if item.combined_mask_path else "",
         "mapping_status": item.mapping_status,
         "notes": item.notes,
     } for item in mappings])
@@ -258,6 +305,12 @@ def merge_masks_for_case(left_path: Path, right_path: Path) -> np.ndarray:
     """Merge separate SCR annotations; no cleanup or morphology is applied."""
 
     return merge_lung_masks(read_mask(left_path), read_mask(right_path)) > 0
+
+
+def binarize_combined_grayscale_mask(mask_path: Path) -> np.ndarray:
+    """Decode the audited resized Kaggle mirror mask using its declared >=128 rule."""
+
+    return read_mask(mask_path) >= COMBINED_GT_MASK_THRESHOLD
 
 
 def binary_dice_iou(prediction: np.ndarray, truth: np.ndarray) -> tuple[float, float]:
@@ -313,18 +366,28 @@ def bootstrap_summary(values: np.ndarray, iterations: int, seed: int) -> dict[st
 
 
 def evaluate_mappings(
-    mappings: list[CaseMapping], segmenter: Any, checkpoint_sha256: str
+    mappings: list[CaseMapping], segmenter: Any, checkpoint_sha256: str, *, ground_truth_mask_mode: str = "separate_left_right"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Perform frozen inference per mapped case and record recoverable failures."""
 
     metrics: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
     for item in mappings:
-        assert item.image_path is not None and item.left_mask_path is not None and item.right_mask_path is not None
+        if item.image_path is None:
+            raise ValueError(f"Mapped case lacks image path: {item.case_id}")
         try:
             with Image.open(item.image_path) as opened:
                 image = opened.copy()
-            truth = merge_masks_for_case(item.left_mask_path, item.right_mask_path)
+            if ground_truth_mask_mode == "combined_grayscale":
+                if item.combined_mask_path is None:
+                    raise ValueError(f"Mapped case lacks combined mask path: {item.case_id}")
+                truth = binarize_combined_grayscale_mask(item.combined_mask_path)
+            elif ground_truth_mask_mode == "separate_left_right":
+                if item.left_mask_path is None or item.right_mask_path is None:
+                    raise ValueError(f"Mapped case lacks separate left/right mask path: {item.case_id}")
+                truth = merge_masks_for_case(item.left_mask_path, item.right_mask_path)
+            else:
+                raise ValueError(f"Unsupported ground-truth mask mode: {ground_truth_mask_mode}")
             if image.size != (truth.shape[1], truth.shape[0]):
                 raise ValueError(f"Image/mask shape mismatch: image {(image.height, image.width)}, mask {truth.shape}.")
             probability = segmenter.predict_proba(image)
@@ -365,7 +428,14 @@ def qualitative_case_ids(metrics: pd.DataFrame) -> list[str]:
     return selected
 
 
-def save_qualitative_panel(metrics: pd.DataFrame, mappings: list[CaseMapping], segmenter: Any, output_dir: Path) -> list[str]:
+def save_qualitative_panel(
+    metrics: pd.DataFrame,
+    mappings: list[CaseMapping],
+    segmenter: Any,
+    output_dir: Path,
+    *,
+    ground_truth_mask_mode: str,
+) -> list[str]:
     """Save deterministic representative image/mask/prediction/overlay panels."""
 
     selected = qualitative_case_ids(metrics)
@@ -375,13 +445,22 @@ def save_qualitative_panel(metrics: pd.DataFrame, mappings: list[CaseMapping], s
     figure, axes = plt.subplots(len(selected), 4, figsize=(12, 3 * len(selected)), squeeze=False)
     for row, case_id in enumerate(selected):
         item = lookup[case_id]
-        assert item.image_path is not None and item.left_mask_path is not None and item.right_mask_path is not None
+        if item.image_path is None:
+            raise ValueError(f"Mapped case lacks image path: {case_id}")
         with Image.open(item.image_path) as opened:
             image = np.asarray(opened.convert("L"))
             probability = segmenter.predict_proba(opened.copy()).detach().cpu().numpy()
-        truth = merge_masks_for_case(item.left_mask_path, item.right_mask_path)
+        if ground_truth_mask_mode == "combined_grayscale":
+            if item.combined_mask_path is None:
+                raise ValueError(f"Mapped case lacks combined mask path: {case_id}")
+            truth = binarize_combined_grayscale_mask(item.combined_mask_path)
+        else:
+            if item.left_mask_path is None or item.right_mask_path is None:
+                raise ValueError(f"Mapped case lacks separate left/right mask path: {case_id}")
+            truth = merge_masks_for_case(item.left_mask_path, item.right_mask_path)
         prediction = probability >= MASK_THRESHOLD
-        panels = ((image, "Chest X-ray", "gray"), (truth, "Ground-truth merged lung mask", "gray"), (prediction, "Predicted binary lung mask", "gray"))
+        truth_title = "Ground-truth combined lung mask" if ground_truth_mask_mode == "combined_grayscale" else "Ground-truth merged lung mask"
+        panels = ((image, "Chest X-ray", "gray"), (truth, truth_title, "gray"), (prediction, "Predicted binary lung mask", "gray"))
         for column, (array, title, cmap) in enumerate(panels):
             axes[row, column].imshow(array, cmap=cmap)
             axes[row, column].set_title(title if row == 0 else "")
@@ -419,6 +498,20 @@ def _prepare_output_dir(output_dir: Path, overwrite: bool) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _validate_input_mode(args: argparse.Namespace) -> str:
+    """Reject incompatible mask sources before writing an audit or loading a model."""
+
+    combined = args.combined_masks_root is not None
+    separate_or_csv = args.left_masks_root is not None or args.right_masks_root is not None or args.mapping_csv is not None
+    if combined and separate_or_csv:
+        raise ValueError("--combined-masks-root is mutually exclusive with separate-mask roots and --mapping-csv.")
+    if combined:
+        return "combined_grayscale"
+    if args.masks_root is None:
+        raise ValueError("--masks-root is required unless --combined-masks-root is supplied.")
+    return "separate_left_right"
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     """Run mapping audit then (only if safe) exact frozen segmentation inference."""
 
@@ -426,9 +519,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("--bootstrap-iterations must be positive.")
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("--device cuda was requested but CUDA is unavailable.")
+    ground_truth_mask_mode = _validate_input_mode(args)
     _prepare_output_dir(args.output_dir, args.overwrite)
     mappings = discover_mappings(args.images_root, args.masks_root, left_masks_root=args.left_masks_root,
-                                 right_masks_root=args.right_masks_root, mapping_csv=args.mapping_csv)
+                                 right_masks_root=args.right_masks_root, mapping_csv=args.mapping_csv,
+                                 combined_masks_root=args.combined_masks_root)
     mapping_frame(mappings).to_csv(args.output_dir / "segmentation_mapping_audit.csv", index=False)
     resolved = require_resolved_mappings(mappings)
     selected = deterministic_sample(resolved, args.max_samples, args.seed)
@@ -436,19 +531,32 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return {"audit_only": True, "number_discovered": len(mappings), "number_mapped": len(resolved), "number_selected": len(selected)}
     checkpoint_sha = verify_checkpoint_sha256(args.checkpoint, args.expected_checkpoint_sha256)
     segmenter = FrozenLungSegmenter(args.checkpoint, device=args.device)
-    metrics, failures = evaluate_mappings(selected, segmenter, checkpoint_sha)
+    metrics, failures = evaluate_mappings(selected, segmenter, checkpoint_sha, ground_truth_mask_mode=ground_truth_mask_mode)
     metrics.to_csv(args.output_dir / "segmentation_case_metrics.csv", index=False)
     failures.to_csv(args.output_dir / "segmentation_failures.csv", index=False)
     summary = {"dice": bootstrap_summary(metrics["dice"].to_numpy(), args.bootstrap_iterations, args.seed),
                "iou": bootstrap_summary(metrics["iou"].to_numpy(), args.bootstrap_iterations, args.seed)} if not metrics.empty else {}
     summary_rows = [{"metric": metric, **values} for metric, values in summary.items()]
     pd.DataFrame(summary_rows).to_csv(args.output_dir / "segmentation_summary.csv", index=False)
-    selected_panels = save_qualitative_panel(metrics, selected, segmenter, args.output_dir)
+    selected_panels = save_qualitative_panel(metrics, selected, segmenter, args.output_dir, ground_truth_mask_mode=ground_truth_mask_mode)
     model_config = segmenter.metadata.get("model_config", {})
     training_config = segmenter.metadata.get("training_config", {})
+    dataset_image_count = len([path for path in _files(args.images_root) if path.suffix.lower() in IMAGE_SUFFIXES])
+    ground_truth_provenance = {
+        "ground_truth_mask_mode": ground_truth_mask_mode,
+        "ground_truth_mask_binarization": "uint8 >= 128" if ground_truth_mask_mode == "combined_grayscale" else "separate masks: pixel > 0 union",
+        "ground_truth_mask_threshold": COMBINED_GT_MASK_THRESHOLD if ground_truth_mask_mode == "combined_grayscale" else None,
+        # Historical compatibility: this is the frozen prediction threshold, not the GT decoding threshold.
+        "mask_threshold": MASK_THRESHOLD,
+        "prediction_mask_threshold": MASK_THRESHOLD,
+        "postprocessing": "none",
+    }
     metadata = {
         "dataset": "JSRT",
-        "annotation_source": "SCR-derived separate left/right lung masks",
+        "annotation_source": "Kaggle JSRT resized grayscale combined lung-mask mirror" if ground_truth_mask_mode == "combined_grayscale" else "SCR-derived separate left/right lung masks",
+        "images_root": str(args.images_root),
+        "masks_root": str(args.masks_root) if args.masks_root else None,
+        "combined_masks_root": str(args.combined_masks_root) if args.combined_masks_root else None,
         "checkpoint_path": str(args.checkpoint),
         "checkpoint_sha256": checkpoint_sha,
         "expected_checkpoint_sha256": args.expected_checkpoint_sha256.lower(),
@@ -459,12 +567,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "base_channels": model_config.get("base_channels"),
         "depth": model_config.get("depth"),
         "training_config": training_config,
-        "mask_threshold": MASK_THRESHOLD,
-        "postprocessing": "none",
+        **ground_truth_provenance,
         "device": args.device,
         "bootstrap_iterations": args.bootstrap_iterations,
         "seed": args.seed,
         "max_samples": args.max_samples,
+        "dataset_image_count": dataset_image_count,
         "number_discovered": len(mappings),
         "number_mapped": len(resolved),
         "number_evaluated": len(metrics),
@@ -475,7 +583,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "torch_version": torch.__version__,
         "generated_at_utc": datetime.now(UTC).isoformat(),
     }
-    (args.output_dir / "segmentation_summary.json").write_text(json.dumps(summary, indent=2, default=_json_safe), encoding="utf-8")
+    summary_document = {"metrics": summary, **ground_truth_provenance, "dataset_image_count": dataset_image_count,
+                        "number_evaluated": len(metrics), "failure_count": len(failures),
+                        "checkpoint_sha256": checkpoint_sha, "model_config": model_config}
+    (args.output_dir / "segmentation_summary.json").write_text(json.dumps(summary_document, indent=2, default=_json_safe), encoding="utf-8")
     (args.output_dir / "segmentation_metadata.json").write_text(json.dumps(metadata, indent=2, default=_json_safe), encoding="utf-8")
     return metadata
 
