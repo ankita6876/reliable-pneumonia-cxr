@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix, precision_recall_curve, roc_curve
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pneumonia_ai.evaluation.core import (  # noqa: E402
     apply_temperature, bootstrap_confidence_intervals, calibration_metrics, discrimination_metrics,
+    external_threshold_metadata,
     failure_detection_all, failure_detection_table, fit_temperature, selective_prediction_all,
     select_threshold, validate_predictions,
 )
@@ -24,6 +25,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--external-predictions", required=True); parser.add_argument("--validation-predictions", required=True)
     parser.add_argument("--output-dir", required=True); parser.add_argument("--threshold-method", choices=("youden", "max_f1", "fixed_0.5"), default="youden")
+    parser.add_argument("--frozen-threshold", type=float, help="Already selected from non-external validation data; never optimized on RSNA.")
+    parser.add_argument("--threshold-source", help="Required provenance source for --frozen-threshold.")
+    parser.add_argument("--threshold-selection-dataset", default="CheXpert validation", help="Dataset that selected the supplied threshold; external datasets are rejected.")
     parser.add_argument("--bootstrap-iterations", type=int, default=1000); parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -47,9 +51,24 @@ def main() -> None:
     external = validate_predictions(pd.read_csv(args.external_predictions))
     if set(validation.split) != {"validation"}: raise ValueError("Validation predictions must contain only CheXpert validation rows.")
     if set(external.split) != {"external_test"}: raise ValueError("External predictions must contain only external_test rows.")
-    threshold = select_threshold(validation, args.threshold_method); temperature = fit_temperature(validation)
+    if args.frozen_threshold is None:
+        threshold = select_threshold(validation, args.threshold_method)
+        threshold_metadata = external_threshold_metadata(
+            threshold=threshold, source=str(Path(args.validation_predictions).resolve()),
+            method=args.threshold_method, selection_dataset="CheXpert validation",
+        )
+    else:
+        if not args.threshold_source:
+            raise ValueError("--threshold-source is required with --frozen-threshold.")
+        threshold_metadata = external_threshold_metadata(
+            threshold=args.frozen_threshold, source=args.threshold_source,
+            method="supplied_frozen_validation_threshold",
+            selection_dataset=args.threshold_selection_dataset,
+        )
+        threshold = float(threshold_metadata["threshold"])
+    temperature = fit_temperature(validation)
     external = apply_temperature(external, float(temperature["temperature"]))
-    metrics = {**discrimination_metrics(external, threshold), **calibration_metrics(external), "threshold_method": args.threshold_method, "threshold": threshold, "temperature": temperature["temperature"], "parameter_source": "CheXpert validation"}
+    metrics = {**discrimination_metrics(external, threshold), **calibration_metrics(external), **threshold_metadata, "temperature": temperature["temperature"], "parameter_source": "CheXpert validation"}
     (output / "external_metrics.json").write_text(json.dumps(metrics, indent=2, allow_nan=True)); pd.DataFrame([metrics]).drop(columns=["reliability"]).to_csv(output / "external_metrics.csv", index=False)
     bootstrap_confidence_intervals(external, threshold, args.bootstrap_iterations, args.seed).to_csv(output / "external_bootstrap_confidence_intervals.csv", index=False)
     selective, curve = selective_prediction_all(external, threshold); selective.to_csv(output / "external_selective_prediction.csv", index=False)

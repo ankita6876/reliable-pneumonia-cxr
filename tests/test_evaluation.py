@@ -19,6 +19,7 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
     compare_single_and_ensemble,
     delong_auroc_test,
     discrimination_metrics,
+    external_threshold_metadata,
     evaluate_predictions,
     failure_detection,
     fit_temperature,
@@ -28,6 +29,7 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
     selective_prediction_all,
     select_threshold,
     metrics_at_threshold,
+    roc_threshold_analysis,
     validate_predictions,
 )
 
@@ -71,6 +73,50 @@ def test_schema_metrics_threshold_and_calibration() -> None:
         validate_predictions(frame.assign(image_path="C:/private/image.png"))
     with pytest.raises(ValueError, match="validation"):
         select_threshold(_predictions("test"))
+
+
+def test_youden_j_returns_full_roc_and_highest_threshold_on_tie() -> None:
+    result = roc_threshold_analysis(
+        np.array([0, 0, 1, 1]), np.array([.1, .4, .4, .9]),
+    )
+    assert {"fpr", "tpr", "thresholds", "youden_j", "selected_threshold", "selected_youden_j"} <= set(result)
+    assert result["selected_threshold"] == pytest.approx(.9)
+    assert result["selected_youden_j"] == pytest.approx(.5)
+    assert "highest finite threshold" in result["tie_breaking"]
+
+
+@pytest.mark.parametrize(
+    ("targets", "probabilities", "message"),
+    [
+        (np.array([], dtype=int), np.array([], dtype=float), "non-empty"),
+        (np.array([0, 0]), np.array([.1, .2]), "both target classes"),
+        (np.array([0, 1]), np.array([.1, np.nan]), "NaN or infinite"),
+    ],
+)
+def test_youden_j_rejects_invalid_input(targets, probabilities, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        roc_threshold_analysis(targets, probabilities)
+
+
+def test_supplied_external_threshold_requires_non_external_provenance() -> None:
+    metadata = external_threshold_metadata(
+        threshold=.37, source="configs/operating_thresholds/original_seed_42.json",
+        method="supplied_frozen_validation_threshold", selection_dataset="CheXpert validation",
+    )
+    assert metadata["threshold"] == pytest.approx(.37)
+    assert metadata["threshold_selection_dataset"] == "CheXpert validation"
+    with pytest.raises(ValueError, match="must not select"):
+        external_threshold_metadata(
+            threshold=.37, source="RSNA", method="youden_j_roc", selection_dataset="RSNA external",
+        )
+
+
+def test_supplied_threshold_application_is_threshold_only() -> None:
+    frame = _predictions()
+    metrics = discrimination_metrics(frame, .75)
+    assert metrics["threshold"] == pytest.approx(.75)
+    assert metrics["auroc"] == pytest.approx(1.0)
+    assert metrics["auprc"] == pytest.approx(1.0)
 
 
 def test_temperature_bootstrap_ensemble_uncertainty_and_selective_prediction() -> None:

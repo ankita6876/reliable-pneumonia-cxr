@@ -80,6 +80,45 @@ def validate_predictions(frame: pd.DataFrame, *, require_logits: bool = True) ->
     return frame.copy()
 
 
+def roc_threshold_analysis(y_true: np.ndarray, y_prob: np.ndarray) -> dict[str, Any]:
+    """Return a deterministic, finite Youden-J operating point from labels/probabilities.
+
+    The highest finite ROC threshold among tied maximum-J points is selected.
+    Choosing the higher threshold is deterministic and favours specificity when
+    sensitivity/specificity trade-offs have identical Youden's J. Invalid input
+    is rejected explicitly: callers must never silently fall back to 0.5.
+    """
+    targets = np.asarray(y_true)
+    probabilities = np.asarray(y_prob, dtype=float)
+    if targets.ndim != 1 or probabilities.ndim != 1 or len(targets) != len(probabilities):
+        raise ValueError("y_true and y_prob must be one-dimensional arrays of equal length.")
+    if len(targets) == 0:
+        raise ValueError("Threshold estimation requires non-empty arrays.")
+    if not np.isfinite(probabilities).all():
+        raise ValueError("Threshold estimation does not accept NaN or infinite probabilities.")
+    if np.any((probabilities < 0) | (probabilities > 1)):
+        raise ValueError("Threshold estimation requires probabilities in [0, 1].")
+    if not np.isfinite(np.asarray(targets, dtype=float)).all() or not np.isin(targets, (0, 1)).all():
+        raise ValueError("Threshold estimation requires binary y_true values 0 and 1.")
+    targets = targets.astype(int)
+    if len(np.unique(targets)) != 2:
+        raise ValueError("Threshold estimation requires both target classes.")
+    fpr, tpr, thresholds = roc_curve(targets, probabilities)
+    youden_j = tpr - fpr
+    finite = np.isfinite(thresholds)
+    if not finite.any():
+        raise ValueError("ROC curve has no finite threshold candidates.")
+    best_j = float(np.max(youden_j[finite]))
+    candidates = np.flatnonzero(finite & np.isclose(youden_j, best_j, rtol=1e-12, atol=1e-12))
+    selected_index = int(candidates[np.argmax(thresholds[candidates])])
+    return {
+        "fpr": fpr, "tpr": tpr, "thresholds": thresholds, "youden_j": youden_j,
+        "selected_index": selected_index, "selected_threshold": float(thresholds[selected_index]),
+        "selected_youden_j": float(youden_j[selected_index]),
+        "tie_breaking": "highest finite threshold among maximum Youden-J candidates",
+    }
+
+
 def select_threshold(frame: pd.DataFrame, method: str = "youden") -> float:
     """Select an operating threshold from validation predictions only."""
     frame = validate_predictions(frame)
@@ -88,16 +127,29 @@ def select_threshold(frame: pd.DataFrame, method: str = "youden") -> float:
     y, p = _arrays(frame)
     if method == "fixed_0.5":
         return 0.5
-    if len(np.unique(y)) != 2:
-        raise ValueError("Threshold selection requires both target classes.")
     if method == "youden":
-        fpr, tpr, thresholds = roc_curve(y, p)
-        return float(np.clip(thresholds[np.argmax(tpr - fpr)], 0, 1))
+        return float(roc_threshold_analysis(y, p)["selected_threshold"])
     if method == "max_f1":
+        if len(np.unique(y)) != 2:
+            raise ValueError("Threshold selection requires both target classes.")
         thresholds = np.unique(p)
         scores = [metrics_at_threshold(y, p, float(t))["f1"] for t in thresholds]
         return float(thresholds[int(np.argmax(scores))])
     raise ValueError("threshold method must be youden, max_f1, or fixed_0.5.")
+
+
+def external_threshold_metadata(
+    *, threshold: float, source: str, method: str, selection_dataset: str,
+) -> dict[str, Any]:
+    """Validate provenance for an externally applied, already frozen threshold."""
+    if not np.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError("Supplied threshold must be finite and lie in [0, 1].")
+    if not source.strip() or not method.strip() or not selection_dataset.strip():
+        raise ValueError("Threshold source, method, and selection dataset are required.")
+    if "external" in selection_dataset.lower() or "rsna" in selection_dataset.lower():
+        raise ValueError("External evaluation must not select or optimize a threshold using external data.")
+    return {"threshold": float(threshold), "threshold_source": source,
+            "threshold_method": method, "threshold_selection_dataset": selection_dataset}
 
 
 def metrics_at_threshold(y: np.ndarray, p: np.ndarray, threshold: float) -> dict[str, float | int]:

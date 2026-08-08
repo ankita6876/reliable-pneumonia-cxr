@@ -1,0 +1,17 @@
+{
+  "dataset_used_for_threshold_selection": "CheXpert validation",
+  "condition": "hard_masked",
+  "seed": 42,
+  "model_identity": "hard_masked_seed_42",
+  "threshold_method": "youden_j_roc",
+  "selected_threshold": 0.5608569383621216,
+  "youden_j": 0.3964948008269308,
+  "validation_auroc": 0.7548263342487169,
+  "validation_pr_auc": 0.8830489836730908,
+  "tie_breaking": "highest finite threshold among maximum Youden-J candidates",
+  "generation_timestamp_utc": "2026-08-08T15:30:19.608246+00:00",
+  "source_prediction_artifact": "experiments/kaggle_gpu/extracted/thesis_optimisation_results/classification_optimisation/A4_regularised_optimisation/validation_predictions.csv",
+  "baseline_git_tag": "v1-thesis-baseline",
+  "baseline_git_commit": "37966623bb490431308394c1e51f46dd5f870d0d",
+  "selection_uses_external_labels": false
+}
