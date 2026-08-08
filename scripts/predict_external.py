@@ -30,7 +30,7 @@ from scripts.classification.checkpoint_compatibility import (  # noqa: E402
 from scripts.train_baseline import _transforms  # noqa: E402
 
 MANIFEST_COLUMNS = ("patient_id", "image_path", "binary_target", "has_bounding_box", "bounding_box_count", "split", "dataset")
-OUTPUT_COLUMNS = ("patient_id", "image_path", "binary_target", "probability", "predicted_class", "logit", "split", "dataset", "model_name", "run_id", "input_mode", "has_bounding_box", "bounding_box_count")
+OUTPUT_COLUMNS = ("patient_id", "case_id", "image_path", "projection", "binary_target", "probability", "predicted_class", "logit", "split", "dataset", "model_name", "run_id", "input_mode", "has_bounding_box", "bounding_box_count")
 
 
 def _first_valid_number(value: object) -> float | None:
@@ -75,6 +75,22 @@ def load_dicom_as_pil(path: Path) -> Image.Image:
     return Image.fromarray(gray, mode="L").convert("RGB")
 
 
+def load_external_image_as_pil(path: Path) -> Image.Image:
+    """Load an external image without changing the established DICOM path.
+
+    Raster images are decoded by Pillow and converted to RGB; DICOM images retain
+    the historical RSNA windowing and MONOCHROME handling above.
+    """
+
+    if path.suffix.lower() == ".dcm":
+        return load_dicom_as_pil(path)
+    try:
+        with Image.open(path) as source:
+            return source.convert("RGB")
+    except (OSError, ValueError) as error:
+        raise ValueError(f"Unable to read raster image {path}: {error}") from error
+
+
 def resolve_image_path(value: str | Path, image_root: Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else image_root / path
@@ -85,7 +101,8 @@ def validate_manifest(manifest: Path, image_root: Path) -> pd.DataFrame:
     frame = pd.read_csv(manifest)
     missing = [column for column in MANIFEST_COLUMNS if column not in frame.columns]
     if missing: raise ValueError("Manifest missing required columns: " + ", ".join(missing))
-    if frame.patient_id.isna().any() or frame.patient_id.astype(str).duplicated().any(): raise ValueError("Manifest patient_id values must be unique and non-missing")
+    if frame.patient_id.isna().any(): raise ValueError("Manifest patient_id values must be non-missing")
+    if frame.image_path.isna().any() or frame.image_path.astype(str).duplicated().any(): raise ValueError("Manifest image_path values must be unique and non-missing")
     labels = pd.to_numeric(frame.binary_target, errors="raise")
     if not labels.isin([0, 1]).all(): raise ValueError("Manifest binary_target must contain only 0 and 1")
     frame = frame.copy(); frame["binary_target"] = labels.astype(int); frame["_source_path"] = frame.image_path.map(lambda value: resolve_image_path(value, image_root))
@@ -147,12 +164,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--manifest", required=True, type=Path); parser.add_argument("--image-root", required=True, type=Path)
     parser.add_argument("--checkpoint", required=True, type=Path); parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu", choices=("cpu", "cuda"))
-    parser.add_argument("--segmentation-checkpoint", type=Path); parser.add_argument("--batch-size", type=int, default=16); parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--segmentation-checkpoint", type=Path); parser.add_argument("--expected-segmentation-sha256")
+    parser.add_argument("--batch-size", type=int, default=16); parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--max-samples", type=int); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args(argv)
 
 
-def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, output: Path, device: str = "cpu", segmentation_checkpoint: Path | None = None, batch_size: int = 16, num_workers: int = 0, max_samples: int | None = None, seed: int = 42, overwrite: bool = False) -> pd.DataFrame:
+def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, output: Path, device: str = "cpu", segmentation_checkpoint: Path | None = None, expected_segmentation_sha256: str | None = None, batch_size: int = 16, num_workers: int = 0, max_samples: int | None = None, seed: int = 42, overwrite: bool = False) -> pd.DataFrame:
     if device not in {"cpu", "cuda"}: raise ValueError("device must be cpu or cuda")
     if device == "cuda" and not torch.cuda.is_available(): raise ValueError("CUDA requested but is not available")
     if batch_size < 1 or num_workers < 0: raise ValueError("batch_size must be positive and num_workers non-negative")
@@ -164,20 +182,25 @@ def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, outp
     config = _classifier_configuration(checkpoint, state); mode = InputMode(config["input_mode"])
     if mode is not InputMode.ORIGINAL and segmentation_checkpoint is None: raise ValueError("--segmentation-checkpoint is required for non-original input modes")
     if segmentation_checkpoint is not None and not segmentation_checkpoint.is_file(): raise FileNotFoundError(f"Segmentation checkpoint does not exist: {segmentation_checkpoint}")
+    segmentation_sha256 = _sha256(segmentation_checkpoint)
+    if expected_segmentation_sha256 and segmentation_sha256 != expected_segmentation_sha256.lower():
+        raise ValueError("Segmentation checkpoint SHA-256 does not match --expected-segmentation-sha256")
     model = create_model(config["backbone"], pretrained=False); model.load_state_dict(state["model_state_dict"], strict=True); model.to(device).eval()
     size, threshold, padding = int(config["classifier_image_size"]), float(config["mask_threshold"]), int(config["lung_crop_padding"])
+    if mode is not InputMode.ORIGINAL and threshold != 0.5:
+        raise ValueError(f"Historical hard-mask threshold must be 0.5; checkpoint specifies {threshold}")
     _, transform = _transforms(size, config["preprocessing"])
     segmenter = FrozenLungSegmenter(segmentation_checkpoint, device) if segmentation_checkpoint else None
     cache = None
     if segmenter:
         cache = MaskCache(output.parent / "mask_cache")
-        cache.validate_or_initialise_metadata({"schema_version": 1, "segmentation_checkpoint_sha256": _sha256(segmentation_checkpoint), "segmentation_input_size": segmenter.image_size, "mask_threshold": threshold, "postprocessing": "none"})
+        cache.validate_or_initialise_metadata({"schema_version": 1, "segmentation_checkpoint_sha256": segmentation_sha256, "segmentation_input_size": segmenter.image_size, "mask_threshold": threshold, "postprocessing": "none"})
     started = datetime.now(timezone.utc); rows: list[dict[str, object]] = []
     with torch.inference_mode():
         for offset in range(0, len(frame), batch_size):
             batch = frame.iloc[offset:offset + batch_size]; images = []
             for _, record in batch.iterrows():
-                source = record["_source_path"]; image = load_dicom_as_pil(source)
+                source = record["_source_path"]; image = load_external_image_as_pil(source)
                 if segmenter and cache:
                     key = cache.key(source, segmentation_checkpoint, threshold, segmenter.image_size); probability = cache.get(key)
                     if probability is None: probability = segmenter.predict_proba(image); cache.set(key, probability, source_path=source)
@@ -186,11 +209,11 @@ def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, outp
                 images.append(transform(image.convert("RGB")))
             logits = model(torch.stack(images).to(device)).view(-1).detach().cpu(); probabilities = torch.sigmoid(logits)
             for (_, record), logit, probability in zip(batch.iterrows(), logits, probabilities):
-                rows.append({"patient_id": str(record["patient_id"]), "image_path": str(record["image_path"]), "binary_target": int(record["binary_target"]), "probability": float(probability), "predicted_class": int(probability >= .5), "logit": float(logit), "split": record["split"], "dataset": record["dataset"], "model_name": config["backbone"], "run_id": str(checkpoint), "input_mode": mode.value, "has_bounding_box": record["has_bounding_box"], "bounding_box_count": record["bounding_box_count"]})
+                rows.append({"patient_id": str(record["patient_id"]), "case_id": str(record.get("case_id", record["image_path"])), "image_path": str(record["image_path"]), "projection": str(record.get("projection", "")), "binary_target": int(record["binary_target"]), "probability": float(probability), "predicted_class": int(probability >= .5), "logit": float(logit), "split": record["split"], "dataset": record["dataset"], "model_name": config["backbone"], "run_id": str(checkpoint), "input_mode": mode.value, "has_bounding_box": record["has_bounding_box"], "bounding_box_count": record["bounding_box_count"]})
             processed = offset + len(batch)
             if processed == len(frame) or processed % 500 == 0: print(f"Processed {processed}/{len(frame)}", flush=True)
     output.parent.mkdir(parents=True, exist_ok=True); predictions = pd.DataFrame(rows, columns=OUTPUT_COLUMNS); predictions.to_csv(output, index=False)
-    metadata = {"manifest_path": str(manifest.resolve()), "image_root": str(image_root.resolve()), "checkpoint_path": str(checkpoint.resolve()), "checkpoint_sha256": _sha256(checkpoint), "segmentation_checkpoint_path": str(segmentation_checkpoint.resolve()) if segmentation_checkpoint else None, "segmentation_checkpoint_sha256": _sha256(segmentation_checkpoint), "input_mode": mode.value, "backbone": config["backbone"], "preprocessing": config["preprocessing"], "classifier_image_size": size, "mask_threshold": threshold, "lung_crop_padding": padding, "device": device, "batch_size": batch_size, "num_workers": num_workers, "seed": seed, "max_samples": max_samples, "selected_patient_ids": frame.patient_id.astype(str).tolist(), "row_count": len(predictions), "positive_count": int(predictions.binary_target.sum()), "negative_count": int((predictions.binary_target == 0).sum()), "start_time": started.isoformat(), "end_time": datetime.now(timezone.utc).isoformat(), "python_version": platform.python_version(), "pytorch_version": torch.__version__, "pydicom_version": pydicom.__version__, "git_commit": _git_commit()}
+    metadata = {"manifest_path": str(manifest.resolve()), "image_root": str(image_root.resolve()), "checkpoint_path": str(checkpoint.resolve()), "checkpoint_sha256": _sha256(checkpoint), "segmentation_checkpoint_path": str(segmentation_checkpoint.resolve()) if segmentation_checkpoint else None, "segmentation_checkpoint_sha256": segmentation_sha256, "expected_segmentation_sha256": expected_segmentation_sha256, "input_mode": mode.value, "backbone": config["backbone"], "preprocessing": config["preprocessing"], "classifier_image_size": size, "mask_threshold": threshold, "lung_crop_padding": padding, "device": device, "batch_size": batch_size, "num_workers": num_workers, "seed": seed, "max_samples": max_samples, "selected_patient_ids": frame.patient_id.astype(str).tolist(), "selected_case_ids": predictions.case_id.astype(str).tolist(), "row_count": len(predictions), "positive_count": int(predictions.binary_target.sum()), "negative_count": int((predictions.binary_target == 0).sum()), "start_time": started.isoformat(), "end_time": datetime.now(timezone.utc).isoformat(), "python_version": platform.python_version(), "pytorch_version": torch.__version__, "pydicom_version": pydicom.__version__, "git_commit": _git_commit()}
     output.with_name(output.stem + "_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return predictions
 

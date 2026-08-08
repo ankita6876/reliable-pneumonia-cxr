@@ -24,7 +24,8 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--external-predictions", required=True); parser.add_argument("--validation-predictions", required=True)
-    parser.add_argument("--output-dir", required=True); parser.add_argument("--threshold-method", choices=("youden", "max_f1", "fixed_0.5"), default="youden")
+    parser.add_argument("--output-dir", required=True); parser.add_argument("--dataset-name", default="External")
+    parser.add_argument("--threshold-method", choices=("youden", "max_f1", "fixed_0.5"), default="youden")
     parser.add_argument("--frozen-threshold", type=float, help="Already selected from non-external validation data; never optimized on RSNA.")
     parser.add_argument("--threshold-source", help="Required provenance source for --frozen-threshold.")
     parser.add_argument("--threshold-selection-dataset", default="CheXpert validation", help="Dataset that selected the supplied threshold; external datasets are rejected.")
@@ -32,11 +33,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _save_figures(frame: pd.DataFrame, threshold: float, curve: pd.DataFrame, failure: pd.DataFrame, output: Path) -> None:
+def _save_figures(frame: pd.DataFrame, threshold: float, curve: pd.DataFrame, failure: pd.DataFrame, output: Path, dataset_name: str = "External") -> None:
     y, p = frame.binary_target.to_numpy(int), frame.probability.to_numpy(float)
-    fpr, tpr, _ = roc_curve(y, p); fig, ax = plt.subplots(); ax.plot(fpr, tpr); ax.plot([0, 1], [0, 1], "--"); ax.set(xlabel="False positive rate", ylabel="True positive rate", title="RSNA ROC curve"); fig.tight_layout(); fig.savefig(output / "external_roc_curve.png", dpi=300); plt.close(fig)
-    recall, precision, _ = precision_recall_curve(y, p); fig, ax = plt.subplots(); ax.plot(recall, precision); ax.set(xlabel="Recall", ylabel="Precision", title="RSNA precision-recall curve"); fig.tight_layout(); fig.savefig(output / "external_precision_recall_curve.png", dpi=300); plt.close(fig)
-    observed, predicted = calibration_curve(y, p, n_bins=10); fig, ax = plt.subplots(); ax.plot(predicted, observed, "o-"); ax.plot([0, 1], [0, 1], "--"); ax.set(xlabel="Mean predicted probability", ylabel="Observed frequency", title="RSNA reliability diagram"); fig.tight_layout(); fig.savefig(output / "external_reliability_diagram.png", dpi=300); plt.close(fig)
+    fpr, tpr, _ = roc_curve(y, p); fig, ax = plt.subplots(); ax.plot(fpr, tpr); ax.plot([0, 1], [0, 1], "--"); ax.set(xlabel="False positive rate", ylabel="True positive rate", title=f"{dataset_name} ROC curve"); fig.tight_layout(); fig.savefig(output / "external_roc_curve.png", dpi=300); plt.close(fig)
+    recall, precision, _ = precision_recall_curve(y, p); fig, ax = plt.subplots(); ax.plot(recall, precision); ax.set(xlabel="Recall", ylabel="Precision", title=f"{dataset_name} precision-recall curve"); fig.tight_layout(); fig.savefig(output / "external_precision_recall_curve.png", dpi=300); plt.close(fig)
+    observed, predicted = calibration_curve(y, p, n_bins=10); fig, ax = plt.subplots(); ax.plot(predicted, observed, "o-"); ax.plot([0, 1], [0, 1], "--"); ax.set(xlabel="Mean predicted probability", ylabel="Observed frequency", title=f"{dataset_name} reliability diagram"); fig.tight_layout(); fig.savefig(output / "external_reliability_diagram.png", dpi=300); plt.close(fig)
     matrix = confusion_matrix(y, p >= threshold, labels=[0, 1]); fig, ax = plt.subplots(); image = ax.imshow(matrix, cmap="Blues"); fig.colorbar(image, ax=ax); ax.set(xticks=[0, 1], yticks=[0, 1], xticklabels=["Negative", "Positive"], yticklabels=["Negative", "Positive"], xlabel="Predicted", ylabel="Target", title="RSNA confusion matrix"); [ax.text(j, i, value, ha="center", va="center") for i, row in enumerate(matrix) for j, value in enumerate(row)]; fig.tight_layout(); fig.savefig(output / "external_confusion_matrix.png", dpi=300); plt.close(fig)
     fig, ax = plt.subplots()
     for name, item in curve.groupby("uncertainty_measure"): ax.plot(item.coverage, item.risk, label=name)
@@ -73,7 +74,7 @@ def main() -> None:
     bootstrap_confidence_intervals(external, threshold, args.bootstrap_iterations, args.seed).to_csv(output / "external_bootstrap_confidence_intervals.csv", index=False)
     selective, curve = selective_prediction_all(external, threshold); selective.to_csv(output / "external_selective_prediction.csv", index=False)
     failure = failure_detection_table(failure_detection_all(external, threshold)); failure.to_csv(output / "external_failure_detection.csv", index=False)
-    _save_figures(external, threshold, curve, failure, output)
+    _save_figures(external, threshold, curve, failure, output, args.dataset_name)
 
 
 if __name__ == "__main__":

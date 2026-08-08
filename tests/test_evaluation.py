@@ -20,6 +20,7 @@ from pneumonia_ai.evaluation.core import (  # noqa: E402
     delong_auroc_test,
     discrimination_metrics,
     external_threshold_metadata,
+    align_paired_external_predictions,
     evaluate_predictions,
     failure_detection,
     fit_temperature,
@@ -109,6 +110,18 @@ def test_supplied_external_threshold_requires_non_external_provenance() -> None:
         external_threshold_metadata(
             threshold=.37, source="RSNA", method="youden_j_roc", selection_dataset="RSNA external",
         )
+    with pytest.raises(ValueError, match="External evaluation"):
+        external_threshold_metadata(
+            threshold=.37, source="PadChest", method="youden_j_roc", selection_dataset="PadChest",
+        )
+
+
+def test_external_pairing_requires_identical_cases_and_labels() -> None:
+    original = _predictions("external_test")
+    masked = original.assign(probability=1 - original.probability, logit=-original.logit)
+    assert len(align_paired_external_predictions(original, masked)) == len(original)
+    with pytest.raises(ValueError, match="identical paired cases"):
+        align_paired_external_predictions(original, masked.iloc[:-1])
 
 
 def test_supplied_threshold_application_is_threshold_only() -> None:

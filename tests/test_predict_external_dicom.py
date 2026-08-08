@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 import torch
 from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, generate_uid
+from PIL import Image
 
 import scripts.predict_external as external
 
@@ -48,8 +50,17 @@ def test_path_manifest_validation_and_deterministic_stratification(tmp_path):
     loaded=external.validate_manifest(path,tmp_path); assert loaded["_source_path"].iloc[0]==files[0] and loaded["_source_path"].iloc[1]==files[1]
     one=external.deterministic_sample(loaded,4,42); two=external.deterministic_sample(loaded,4,42)
     assert one.patient_id.tolist()==two.patient_id.tolist() and len(one)==4 and set(one.binary_target)=={0,1}
-    duplicate=loaded.copy(); duplicate.loc[1,"patient_id"]=duplicate.loc[0,"patient_id"]; duplicate.drop(columns="_source_path").to_csv(path,index=False)
+    repeated_patient=loaded.copy(); repeated_patient.loc[1,"patient_id"]=repeated_patient.loc[0,"patient_id"]; repeated_patient.drop(columns="_source_path").to_csv(path,index=False)
+    assert len(external.validate_manifest(path,tmp_path)) == len(repeated_patient)
+    duplicate=repeated_patient.copy(); duplicate.loc[1,"image_path"]=duplicate.loc[0,"image_path"]; duplicate.drop(columns="_source_path").to_csv(path,index=False)
     with pytest.raises(ValueError,match="unique"): external.validate_manifest(path,tmp_path)
+
+
+def test_raster_loader_preserves_existing_dicom_loader(tmp_path):
+    raster=tmp_path/"image.png"; Image.new("L",(3,2),128).save(raster)
+    assert external.load_external_image_as_pil(raster).mode == "RGB"
+    source=dicom(tmp_path/"image.dcm",[[0,1],[2,3]])
+    assert external.load_external_image_as_pil(source).size == (2,2)
 
 
 def checkpoint_config(mode="original"):
@@ -71,6 +82,16 @@ def test_mode_requirements_existing_output_and_cpu_smoke(tmp_path,monkeypatch):
     with pytest.raises(FileExistsError,match="overwrite"): external.predict_external(manifest=manifest_path,image_root=tmp_path,checkpoint=checkpoint,output=output)
     monkeypatch.setattr(external.torch,"load",lambda *args,**kwargs:checkpoint_config("hard_masked"))
     with pytest.raises(ValueError,match="segmentation-checkpoint"): external.predict_external(manifest=manifest_path,image_root=tmp_path,checkpoint=checkpoint,output=tmp_path/"masked.csv")
+
+
+def test_expected_segmentation_sha256_is_enforced(tmp_path, monkeypatch):
+    images=[dicom(tmp_path/f"hash{i}.dcm",[[1,2],[3,4]]) for i in range(2)]; manifest_path,_=manifest(tmp_path,images)
+    checkpoint=tmp_path/"model.pt"; checkpoint.write_bytes(b"checkpoint")
+    segmentation=tmp_path/"segmentation.pt"; segmentation.write_bytes(b"frozen-segmentation")
+    monkeypatch.setattr(external.torch,"load",lambda *args,**kwargs:checkpoint_config("hard_masked"))
+    with pytest.raises(ValueError, match="SHA-256"):
+        external.predict_external(manifest=manifest_path,image_root=tmp_path,checkpoint=checkpoint,output=tmp_path/"bad.csv",segmentation_checkpoint=segmentation,expected_segmentation_sha256="0"*64)
+    assert hashlib.sha256(segmentation.read_bytes()).hexdigest() != "0" * 64
 
 
 def test_cli_preserves_original_and_adds_controls():

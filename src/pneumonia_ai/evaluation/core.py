@@ -50,6 +50,11 @@ def validate_predictions(frame: pd.DataFrame, *, require_logits: bool = True) ->
     for source, destination in aliases.items():
         if destination not in frame and source in frame:
             frame[destination] = frame[source]
+    # External manifests are image-level and may have repeated patient IDs.  A
+    # root-relative image path is a stable study identity when no source study
+    # identifier is available; this preserves legacy RSNA prediction CSVs.
+    if "study_id" not in frame and "image_path" in frame:
+        frame["study_id"] = frame["image_path"].astype(str)
     if "original_label" not in frame and "binary_target" in frame:
         frame["original_label"] = frame["binary_target"]
     if "predicted_class" not in frame and "probability" in frame:
@@ -146,10 +151,23 @@ def external_threshold_metadata(
         raise ValueError("Supplied threshold must be finite and lie in [0, 1].")
     if not source.strip() or not method.strip() or not selection_dataset.strip():
         raise ValueError("Threshold source, method, and selection dataset are required.")
-    if "external" in selection_dataset.lower() or "rsna" in selection_dataset.lower():
+    if any(name in selection_dataset.lower() for name in ("external", "rsna", "padchest", "nih", "mimic")):
         raise ValueError("External evaluation must not select or optimize a threshold using external data.")
     return {"threshold": float(threshold), "threshold_source": source,
             "threshold_method": method, "threshold_selection_dataset": selection_dataset}
+
+
+def align_paired_external_predictions(original: pd.DataFrame, hard_masked: pd.DataFrame) -> pd.DataFrame:
+    """Return a strict one-to-one external pairing without pooling or dropping cases."""
+
+    left, right = validate_predictions(original), validate_predictions(hard_masked)
+    keys = ["patient_id", "study_id", "image_path", "split"]
+    paired = left.merge(right, on=keys, suffixes=("_original", "_hard_masked"), how="outer", indicator=True)
+    if not paired["_merge"].eq("both").all():
+        raise ValueError("Original and hard-masked predictions must contain identical paired cases.")
+    if not paired["binary_target_original"].eq(paired["binary_target_hard_masked"]).all():
+        raise ValueError("Original and hard-masked predictions disagree on binary targets.")
+    return paired.drop(columns="_merge")
 
 
 def metrics_at_threshold(y: np.ndarray, p: np.ndarray, threshold: float) -> dict[str, float | int]:
