@@ -1,0 +1,36 @@
+{
+  "metrics": {
+    "dice": {
+      "mean": 0.9528014769453654,
+      "sample_standard_deviation": 0.02951369022054901,
+      "median": 0.9625101874490628,
+      "bootstrap_ci_95_low": 0.9489780044811696,
+      "bootstrap_ci_95_high": 0.9562882865651664,
+      "count": 247
+    },
+    "iou": {
+      "mean": 0.9112545271462479,
+      "sample_standard_deviation": 0.04983494082139124,
+      "median": 0.9277297721916732,
+      "bootstrap_ci_95_low": 0.904925346815033,
+      "bootstrap_ci_95_high": 0.9172241078177316,
+      "count": 247
+    }
+  },
+  "ground_truth_mask_mode": "combined_grayscale",
+  "ground_truth_mask_binarization": "uint8 >= 128",
+  "ground_truth_mask_threshold": 128,
+  "mask_threshold": 0.5,
+  "prediction_mask_threshold": 0.5,
+  "postprocessing": "none",
+  "dataset_image_count": 247,
+  "number_evaluated": 247,
+  "failure_count": 0,
+  "checkpoint_sha256": "bdcbb77d4872292721a5bce8328401274d1b7d917e5e413f173873c8cf886a1d",
+  "model_config": {
+    "in_channels": 1,
+    "out_channels": 1,
+    "base_channels": 16,
+    "depth": 4
+  }
+}
