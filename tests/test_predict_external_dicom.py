@@ -56,11 +56,19 @@ def test_path_manifest_validation_and_deterministic_stratification(tmp_path):
     with pytest.raises(ValueError,match="unique"): external.validate_manifest(path,tmp_path)
 
 
-def test_raster_loader_preserves_existing_dicom_loader(tmp_path):
+def test_16_bit_grayscale_png_uses_full_native_range(tmp_path):
+    raster=tmp_path/"padchest.png"
+    Image.fromarray(np.array([[0, 32768, 65535]], dtype=np.uint16)).save(raster)
+    loaded=np.asarray(external.load_external_image_as_pil(raster).convert("L"))
+    assert loaded.tolist() == [[0, 128, 255]]
+
+
+def test_ordinary_raster_and_dicom_loader_behaviour_is_unchanged(tmp_path):
     raster=tmp_path/"image.png"; Image.new("L",(3,2),128).save(raster)
-    assert external.load_external_image_as_pil(raster).mode == "RGB"
+    loaded=external.load_external_image_as_pil(raster)
+    assert loaded.mode == "RGB" and np.array_equal(np.asarray(loaded.convert("L")), np.full((2, 3), 128, dtype=np.uint8))
     source=dicom(tmp_path/"image.dcm",[[0,1],[2,3]])
-    assert external.load_external_image_as_pil(source).size == (2,2)
+    assert np.array_equal(np.asarray(external.load_external_image_as_pil(source)), np.asarray(external.load_dicom_as_pil(source)))
 
 
 def checkpoint_config(mode="original"):

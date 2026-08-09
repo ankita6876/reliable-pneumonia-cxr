@@ -37,7 +37,7 @@ def _metadata(tmp_path: Path) -> tuple[pd.DataFrame, Path]:
 
 def test_exact_normalized_pneumonia_policy_and_missing_exclusion(tmp_path: Path) -> None:
     metadata, root = _metadata(tmp_path)
-    manifest, summary = adapter.build_manifest(
+    manifest, missing, summary = adapter.build_manifest(
         metadata, root, image_path_column=None, image_id_column="ImageID", image_dir_column="ImageDir",
         label_column="Labels", pneumonia_concepts=["pneumonia"], patient_id_column="PatientID",
         case_id_column="ImageID", projection_column="Projection", accepted_views=["PA", "AP", "AP_horizontal"],
@@ -47,13 +47,45 @@ def test_exact_normalized_pneumonia_policy_and_missing_exclusion(tmp_path: Path)
     assert summary["exclusions"]["missing_or_unparseable_label"] == 2
     assert summary["exclusions"]["excluded_projection"] == 1
     assert "label_cuis" in manifest and manifest.loc[manifest.case_id.eq("a.png"), "label_cuis"].item() == "['C0032285']"
+    assert missing.empty and summary["intended_cohort_count"] == 3 and summary["available_evaluable_count"] == 3
+
+
+def test_manifest_records_missing_frozen_cohort_image_with_provenance(tmp_path: Path) -> None:
+    metadata, root = _metadata(tmp_path)
+    (root / "images_001" / "b.png").unlink()
+    manifest, missing, summary = adapter.build_manifest(
+        metadata, root, image_path_column=None, image_id_column="ImageID", image_dir_column="ImageDir",
+        label_column="Labels", pneumonia_concepts=["pneumonia"], patient_id_column="PatientID",
+        case_id_column="ImageID", projection_column="Projection", method_label_column="MethodLabel",
+        accepted_views=["PA", "AP"],
+    )
+    assert manifest.case_id.tolist() == ["a.png", "c.png"]
+    assert missing[["case_id", "binary_target", "projection", "method_label", "exclusion_reason"]].to_dict("records") == [{"case_id": "b.png", "binary_target": 0, "projection": "AP", "method_label": "R", "exclusion_reason": "image_unavailable_in_image_root"}]
+    assert summary["intended_cohort_count"] == 3 and summary["available_evaluable_count"] == 2 and summary["missing_image_count"] == 1
 
 
 def test_python_like_lists_and_no_substring_matching() -> None:
+    cases = {
+        "[]": None,
+        None: None,
+        float("nan"): None,
+        "['pneumonia'": None,
+        "not-a-list": None,
+        "['normal']": ["normal"],
+        "['pneumonia']": ["pneumonia"],
+        "[' pneumonia ']": ["pneumonia"],
+        "['pneumonia-like']": ["pneumonia-like"],
+    }
+    for raw, expected in cases.items():
+        assert adapter.parse_label_value(raw) == expected
     assert adapter.parse_label_value("[' Pneumonia ', 'Mass']") == ["pneumonia", "mass"]
-    assert adapter.parse_label_value("['pneumonia-like']") == ["pneumonia-like"]
-    assert adapter.parse_label_value("['pneumonia'") is None
-    assert adapter.parse_label_value(None) is None
+
+
+def test_unusable_labels_are_excluded_and_valid_labels_receive_exact_targets() -> None:
+    metadata = pd.DataFrame({"Labels": ["[]", None, float("nan"), "['pneumonia'", "['normal']", "['pneumonia']", "[' pneumonia ']", "['pneumonia-like']"]})
+    labelled, exclusions = adapter._labelled_rows(metadata, label_column="Labels")
+    assert exclusions == {"missing_or_unparseable_label": 4, "excluded_projection": 0}
+    assert [row["pneumonia_target"] for row in labelled] == [0, 1, 1, 0]
 
 
 def test_configurable_projection_filtering_and_cohort_summary(tmp_path: Path) -> None:

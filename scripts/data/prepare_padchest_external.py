@@ -29,8 +29,8 @@ def normalize_concept(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
-def parse_label_value(value: object, delimiter: str = "|") -> list[str] | None:
-    """Safely parse a report-level list; missing/malformed values are invalid."""
+def parse_label_value(value: object) -> list[str] | None:
+    """Safely parse a non-empty report-level Python list of label strings."""
 
     if value is None or (not isinstance(value, (list, tuple)) and pd.isna(value)):
         return None
@@ -40,16 +40,14 @@ def parse_label_value(value: object, delimiter: str = "|") -> list[str] | None:
         text = str(value).strip()
         if not text or text.casefold() in {"nan", "none", "null"}:
             return None
-        if text.startswith("["):
-            try:
-                parsed = ast.literal_eval(text)
-            except (ValueError, SyntaxError):
-                return None
-        else:
-            parsed = text.split(delimiter)
+        try:
+            parsed = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            return None
     if not isinstance(parsed, (list, tuple)) or not all(isinstance(item, str) for item in parsed):
         return None
-    return [normalize_concept(item) for item in parsed if item.strip()]
+    labels = [normalize_concept(item) for item in parsed if item.strip()]
+    return labels or None
 
 
 def _value(record: pd.Series, column: str | None) -> str:
@@ -156,33 +154,39 @@ def build_manifest(
     image_id_column: str | None, image_dir_column: str | None, label_column: str,
     pneumonia_concepts: list[str], patient_id_column: str | None = None,
     case_id_column: str | None = None, projection_column: str | None = None,
-    accepted_views: list[str] | None = None,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+    method_label_column: str | None = None, accepted_views: list[str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Build the predictor manifest after image acquisition; preserves extra provenance."""
 
     _require_columns(metadata, [image_path_column, image_id_column, image_dir_column, label_column,
-                                patient_id_column, case_id_column, projection_column])
+                                patient_id_column, case_id_column, projection_column, method_label_column])
     concepts = {normalize_concept(value) for value in pneumonia_concepts if value.strip()}
     if not concepts:
         raise ValueError("At least one explicit --pneumonia-concept is required; substring matching is not used.")
     labelled, exclusions = _labelled_rows(metadata, label_column=label_column, projection_column=projection_column, accepted_views=accepted_views)
-    rows = []
+    rows, missing_rows = [], []
     exclusions["missing_image"] = 0
     for item in labelled:
         record = metadata.iloc[item["source_row"]]
         path = image_relative_path(record, image_path_column=image_path_column, image_id_column=image_id_column, image_dir_column=image_dir_column)
-        if not image_root.joinpath(*PurePosixPath(path).parts).is_file():
-            exclusions["missing_image"] += 1
-            continue
         case_id = _value(record, case_id_column) or path
         patient_id = _value(record, patient_id_column) or case_id
         if not case_id or not patient_id:
             raise ValueError(f"Missing case or patient identifier at metadata row {item['source_row']}.")
+        provenance = {"patient_id": patient_id, "case_id": case_id, "image_path": path,
+                      "binary_target": int(bool(set(item["labels"]) & concepts)),
+                      "projection": item["projection"], "method_label": _value(record, method_label_column),
+                      "source_row": item["source_row"], "labels": "|".join(item["labels"]),
+                      "label_cuis": _value(record, "labelCUIS") if "labelCUIS" in metadata else ""}
+        if not image_root.joinpath(*PurePosixPath(path).parts).is_file():
+            exclusions["missing_image"] += 1
+            missing_rows.append({**provenance, "exclusion_reason": "image_unavailable_in_image_root"})
+            continue
         rows.append({"patient_id": patient_id, "case_id": case_id, "image_path": path,
-                     "binary_target": int(bool(set(item["labels"]) & concepts)),
+                     "binary_target": provenance["binary_target"],
                      "has_bounding_box": False, "bounding_box_count": 0, "split": "external_test",
                      "dataset": "padchest", "projection": item["projection"], "source_row": item["source_row"],
-                     "label_cuis": _value(record, "labelCUIS") if "labelCUIS" in metadata else ""})
+                     "method_label": provenance["method_label"], "label_cuis": provenance["label_cuis"]})
     manifest = pd.DataFrame(rows)
     if manifest.empty:
         raise ValueError("No eligible PadChest rows remain after explicit label/projection/image checks.")
@@ -190,7 +194,16 @@ def build_manifest(
         raise ValueError("PadChest case/image identifiers must be unique.")
     if manifest.binary_target.nunique() != 2:
         raise ValueError("Eligible PadChest manifest must contain both pneumonia target classes.")
-    return manifest, {"row_count_input": len(metadata), "row_count_eligible": len(manifest),
+    missing = pd.DataFrame(missing_rows)
+    intended = cohort_summary(labelled, metadata, patient_id_column)
+    evaluable = cohort_summary(
+        [{"source_row": int(row.source_row), "pneumonia_target": int(row.binary_target)} for row in manifest.itertuples()],
+        metadata, patient_id_column,
+    )
+    return manifest, missing, {"row_count_input": len(metadata), "intended_cohort": intended,
+                      "evaluable_cohort": evaluable, "intended_cohort_count": len(labelled),
+                      "available_evaluable_count": len(manifest), "missing_image_count": len(missing),
+                      "row_count_eligible": len(manifest),
                       "positive_count": int(manifest.binary_target.sum()), "negative_count": int((manifest.binary_target == 0).sum()),
                       "exclusions": exclusions, "pneumonia_concepts": sorted(concepts),
                       "label_column": label_column, "projection_column": projection_column,
@@ -248,6 +261,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata-csv", type=Path, required=True); parser.add_argument("--image-root", type=Path)
     parser.add_argument("--output-manifest", type=Path); parser.add_argument("--cohort-request-csv", type=Path)
+    parser.add_argument("--exclusion-output", type=Path, help="CSV recording eligible images unavailable under --image-root.")
     parser.add_argument("--image-path-column"); parser.add_argument("--image-id-column"); parser.add_argument("--image-dir-column")
     parser.add_argument("--patient-id-column"); parser.add_argument("--case-id-column"); parser.add_argument("--projection-column")
     parser.add_argument("--method-label-column"); parser.add_argument("--label-cuis-column"); parser.add_argument("--accepted-view", action="append", default=[])
@@ -278,8 +292,13 @@ def main(argv: list[str] | None = None) -> None:
     if args.output_manifest:
         if args.image_root is None: raise ValueError("--output-manifest requires --image-root.")
         if args.output_manifest.exists() and not args.overwrite: raise FileExistsError(args.output_manifest)
-        manifest, summary = build_manifest(metadata, args.image_root, image_path_column=args.image_path_column, image_id_column=image_id, image_dir_column=image_dir, label_column=label or "", pneumonia_concepts=args.pneumonia_concept, patient_id_column=patient, case_id_column=args.case_id_column or image_id, projection_column=projection, accepted_views=args.accepted_view)
-        args.output_manifest.parent.mkdir(parents=True, exist_ok=True); manifest.to_csv(args.output_manifest, index=False)
+        manifest, missing, summary = build_manifest(metadata, args.image_root, image_path_column=args.image_path_column, image_id_column=image_id, image_dir_column=image_dir, label_column=label or "", pneumonia_concepts=args.pneumonia_concept, patient_id_column=patient, case_id_column=args.case_id_column or image_id, projection_column=projection, method_label_column=args.method_label_column or ("MethodLabel" if "MethodLabel" in metadata else None), accepted_views=args.accepted_view)
+        exclusion_output = args.exclusion_output or args.output_manifest.with_name(args.output_manifest.stem + "_image_availability_exclusions.csv")
+        if exclusion_output.exists() and not args.overwrite: raise FileExistsError(exclusion_output)
+        args.output_manifest.parent.mkdir(parents=True, exist_ok=True); exclusion_output.parent.mkdir(parents=True, exist_ok=True)
+        manifest.to_csv(args.output_manifest, index=False)
+        missing.to_csv(exclusion_output, index=False)
+        summary["image_availability_exclusion_output"] = str(exclusion_output)
         args.output_manifest.with_name(args.output_manifest.stem + "_metadata.json").write_text(json.dumps(summary, indent=2, allow_nan=False), encoding="utf-8")
     if not args.cohort_request_csv and not args.output_manifest:
         raise ValueError("Use --audit-only, --cohort-request-csv, or --output-manifest.")

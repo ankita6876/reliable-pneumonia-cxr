@@ -1,4 +1,4 @@
-"""Frozen external DICOM inference for CheXpert-trained A4 classifiers."""
+"""Frozen external inference for CheXpert-trained A4 classifiers."""
 from __future__ import annotations
 
 import argparse
@@ -78,14 +78,23 @@ def load_dicom_as_pil(path: Path) -> Image.Image:
 def load_external_image_as_pil(path: Path) -> Image.Image:
     """Load an external image without changing the established DICOM path.
 
-    Raster images are decoded by Pillow and converted to RGB; DICOM images retain
-    the historical RSNA windowing and MONOCHROME handling above.
+    Raster images are decoded by Pillow and converted to RGB; a 16-bit grayscale
+    raster is mapped from its native [0, 65535] range to the existing 8-bit RGB
+    contract before the frozen classifier transform. DICOM images retain the
+    historical RSNA windowing and MONOCHROME handling above.
     """
 
     if path.suffix.lower() == ".dcm":
         return load_dicom_as_pil(path)
     try:
         with Image.open(path) as source:
+            if source.mode.startswith("I;16"):
+                pixels = np.asarray(source, dtype=np.uint16)
+                # The frozen validation transform receives an 8-bit RGB PIL image
+                # and applies ToTensor() (/255). Scale the complete native 16-bit
+                # range explicitly rather than allowing Pillow to clip values >255.
+                grayscale = np.rint(pixels.astype(np.float32) * (255.0 / 65535.0)).astype(np.uint8)
+                return Image.fromarray(grayscale, mode="L").convert("RGB")
             return source.convert("RGB")
     except (OSError, ValueError) as error:
         raise ValueError(f"Unable to read raster image {path}: {error}") from error
