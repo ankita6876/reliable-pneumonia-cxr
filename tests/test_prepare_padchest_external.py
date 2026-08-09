@@ -44,6 +44,7 @@ def test_exact_normalized_pneumonia_policy_and_missing_exclusion(tmp_path: Path)
     )
     targets = manifest.set_index("case_id").binary_target.to_dict()
     assert targets == {"a.png": 1, "b.png": 0, "c.png": 0}
+    assert manifest.image_path.tolist() == ["images_001/a.png", "images_001/b.png", "images_001/c.png"]
     assert summary["exclusions"]["missing_or_unparseable_label"] == 2
     assert summary["exclusions"]["excluded_projection"] == 1
     assert "label_cuis" in manifest and manifest.loc[manifest.case_id.eq("a.png"), "label_cuis"].item() == "['C0032285']"
@@ -62,6 +63,36 @@ def test_manifest_records_missing_frozen_cohort_image_with_provenance(tmp_path: 
     assert manifest.case_id.tolist() == ["a.png", "c.png"]
     assert missing[["case_id", "binary_target", "projection", "method_label", "exclusion_reason"]].to_dict("records") == [{"case_id": "b.png", "binary_target": 0, "projection": "AP", "method_label": "R", "exclusion_reason": "image_unavailable_in_image_root"}]
     assert summary["intended_cohort_count"] == 3 and summary["available_evaluable_count"] == 2 and summary["missing_image_count"] == 1
+
+
+def test_flat_imageid_mirror_preserves_metadata_provenance(tmp_path: Path) -> None:
+    metadata, _ = _metadata(tmp_path)
+    flat_root = tmp_path / "flat"
+    flat_root.mkdir()
+    for name in ("a.png", "b.png", "c.png"):
+        Image.new("L", (2, 2)).save(flat_root / name)
+    manifest, missing, _ = adapter.build_manifest(
+        metadata, flat_root, image_path_column=None, image_id_column="ImageID", image_dir_column="ImageDir",
+        label_column="Labels", pneumonia_concepts=["pneumonia"], patient_id_column="PatientID",
+        case_id_column="ImageID", projection_column="Projection", method_label_column="MethodLabel",
+        accepted_views=["PA", "AP"],
+    )
+    assert manifest[["image_path", "patient_id", "binary_target", "projection", "image_dir", "method_label"]].to_dict("records") == [
+        {"image_path": "a.png", "patient_id": "p1", "binary_target": 1, "projection": "PA", "image_dir": "images_001", "method_label": "R"},
+        {"image_path": "b.png", "patient_id": "p1", "binary_target": 0, "projection": "AP", "image_dir": "images_001", "method_label": "R"},
+        {"image_path": "c.png", "patient_id": "p2", "binary_target": 0, "projection": "PA", "image_dir": "images_001", "method_label": "M"},
+    ]
+    assert missing.empty
+    args = type("Args", (), {"label_column": "Labels", "projection_column": "Projection", "patient_id_column": "PatientID", "method_label_column": "MethodLabel", "label_cuis_column": "labelCUIS", "image_id_column": "ImageID", "image_dir_column": "ImageDir", "image_path_column": None})()
+    assert adapter.schema_audit(metadata, flat_root, args)["missing_image_path_count"] == 3
+
+
+def test_image_resolver_does_not_fallback_to_an_unrelated_filename(tmp_path: Path) -> None:
+    root = tmp_path / "flat"
+    root.mkdir()
+    Image.new("L", (2, 2)).save(root / "unrelated.png")
+    record = pd.Series({"ImageID": "expected.png", "ImageDir": "images_001"})
+    assert adapter.resolve_image_relative_path(record, root, image_path_column=None, image_id_column="ImageID", image_dir_column="ImageDir") is None
 
 
 def test_python_like_lists_and_no_substring_matching() -> None:

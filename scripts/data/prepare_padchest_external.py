@@ -80,6 +80,34 @@ def image_relative_path(
     return _portable_relative_path(str(PurePosixPath(image_dir) / image_id))
 
 
+def resolve_image_relative_path(
+    record: pd.Series, image_root: Path, *, image_path_column: str | None,
+    image_id_column: str | None, image_dir_column: str | None,
+) -> str | None:
+    """Resolve a reviewed path, then PadChest nested or flat mirror layouts.
+
+    With ImageDir/ImageID metadata, the canonical nested layout is preferred.
+    A flat mirror is an explicit exact-ImageID fallback; no recursive or fuzzy
+    filename search is performed.
+    """
+
+    if image_path_column:
+        path = image_relative_path(record, image_path_column=image_path_column,
+                                   image_id_column=image_id_column, image_dir_column=image_dir_column)
+        return path if image_root.joinpath(*PurePosixPath(path).parts).is_file() else None
+    image_id, image_dir = _value(record, image_id_column), _value(record, image_dir_column)
+    if not image_id:
+        raise ValueError("Select --image-path-column or --image-id-column.")
+    candidates = []
+    if image_dir:
+        candidates.append(_portable_relative_path(str(PurePosixPath(image_dir) / image_id)))
+    candidates.append(_portable_relative_path(image_id))
+    for path in candidates:
+        if image_root.joinpath(*PurePosixPath(path).parts).is_file():
+            return path
+    return None
+
+
 def _selected_columns(args: argparse.Namespace, metadata: pd.DataFrame) -> tuple[str | None, str | None, str | None]:
     """Use only explicit names, except for the verified PadChest field names."""
 
@@ -168,17 +196,21 @@ def build_manifest(
     exclusions["missing_image"] = 0
     for item in labelled:
         record = metadata.iloc[item["source_row"]]
-        path = image_relative_path(record, image_path_column=image_path_column, image_id_column=image_id_column, image_dir_column=image_dir_column)
+        resolved_path = resolve_image_relative_path(record, image_root, image_path_column=image_path_column,
+                                                    image_id_column=image_id_column, image_dir_column=image_dir_column)
+        path = resolved_path or image_relative_path(record, image_path_column=image_path_column,
+                                                    image_id_column=image_id_column, image_dir_column=image_dir_column)
         case_id = _value(record, case_id_column) or path
         patient_id = _value(record, patient_id_column) or case_id
         if not case_id or not patient_id:
             raise ValueError(f"Missing case or patient identifier at metadata row {item['source_row']}.")
         provenance = {"patient_id": patient_id, "case_id": case_id, "image_path": path,
                       "binary_target": int(bool(set(item["labels"]) & concepts)),
-                      "projection": item["projection"], "method_label": _value(record, method_label_column),
+                      "projection": item["projection"], "image_dir": _value(record, image_dir_column),
+                      "method_label": _value(record, method_label_column),
                       "source_row": item["source_row"], "labels": "|".join(item["labels"]),
                       "label_cuis": _value(record, "labelCUIS") if "labelCUIS" in metadata else ""}
-        if not image_root.joinpath(*PurePosixPath(path).parts).is_file():
+        if resolved_path is None:
             exclusions["missing_image"] += 1
             missing_rows.append({**provenance, "exclusion_reason": "image_unavailable_in_image_root"})
             continue
@@ -186,7 +218,8 @@ def build_manifest(
                      "binary_target": provenance["binary_target"],
                      "has_bounding_box": False, "bounding_box_count": 0, "split": "external_test",
                      "dataset": "padchest", "projection": item["projection"], "source_row": item["source_row"],
-                     "method_label": provenance["method_label"], "label_cuis": provenance["label_cuis"]})
+                     "image_dir": provenance["image_dir"], "method_label": provenance["method_label"],
+                     "label_cuis": provenance["label_cuis"]})
     manifest = pd.DataFrame(rows)
     if manifest.empty:
         raise ValueError("No eligible PadChest rows remain after explicit label/projection/image checks.")
@@ -239,8 +272,8 @@ def schema_audit(metadata: pd.DataFrame, image_root: Path | None, args: argparse
         missing_paths = 0
         for _, record in metadata.iterrows():
             try:
-                path = image_relative_path(record, image_path_column=args.image_path_column, image_id_column=image_id, image_dir_column=image_dir)
-                missing_paths += int(not image_root.joinpath(*PurePosixPath(path).parts).is_file())
+                missing_paths += int(resolve_image_relative_path(record, image_root, image_path_column=args.image_path_column,
+                                                                 image_id_column=image_id, image_dir_column=image_dir) is None)
             except ValueError:
                 missing_paths += 1
     return {"columns": list(metadata.columns), "total_rows": len(metadata), "unique_images": int(metadata[image_id].nunique()) if image_id else None,

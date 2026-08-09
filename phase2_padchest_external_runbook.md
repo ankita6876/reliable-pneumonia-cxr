@@ -33,7 +33,7 @@ python scripts/data/prepare_padchest_external.py \
 
 ## 2. Generate the final inference manifest, then checkpoint verification
 
-Generate the manifest against the real root. `ImageID` is used as the root-relative image path; `MethodLabel`, target, projection, source row, and `labelCUIS` are retained for provenance. The companion exclusion CSV explicitly records every eligible missing image and its target/projection/MethodLabel provenance.
+Generate the manifest against the real root. Although the metadata retains `ImageDir`, the seoyunje 224×224 mirror is flat: `<image_root>/<ImageID>.png`. With no `--image-path-column`, the adapter first checks canonical `ImageDir/ImageID`, then the exact flat `ImageID` path; it never recursively searches or matches another filename. `MethodLabel`, target, projection, source row, and `labelCUIS` are retained for provenance. The companion exclusion CSV explicitly records every eligible missing image and its target/projection/MethodLabel provenance.
 
 ```bash
 python scripts/data/prepare_padchest_external.py \
@@ -41,7 +41,7 @@ python scripts/data/prepare_padchest_external.py \
   --image-root "$PADROOT/images-224/images-224" \
   --output-manifest /kaggle/working/results/phase2_padchest_external/padchest_pa_ap_manifest.csv \
   --exclusion-output /kaggle/working/results/phase2_padchest_external/padchest_pa_ap_image_availability_exclusions.csv \
-  --image-path-column ImageID --image-id-column ImageID \
+  --image-id-column ImageID --image-dir-column ImageDir \
   --patient-id-column PatientID --case-id-column ImageID \
   --projection-column Projection --method-label-column MethodLabel \
   --label-column Labels --label-cuis-column labelCUIS \
