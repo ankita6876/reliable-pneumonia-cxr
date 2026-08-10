@@ -46,14 +46,14 @@ def test_comparison_csv_has_all_modes_and_metrics(tmp_path: Path) -> None:
         "auc": 0.8, "pr_auc": 0.7, "f1": 0.6, "ece": 0.1,
         "brier": 0.2, "accuracy": 0.75, "recall": 0.7, "specificity": 0.8,
     }
-    for mode in ("original", "hard_masked", "lung_crop"):
+    for mode in ("original", "hard_masked", "soft_masked", "lung_crop"):
         directory = tmp_path / mode
         directory.mkdir()
         (directory / "metrics.json").write_text(json.dumps(values))
 
     comparison = build_comparison(tmp_path)
 
-    assert comparison["mode"].tolist() == ["original", "hard_masked", "lung_crop"]
+    assert comparison["mode"].tolist() == ["original", "hard_masked", "soft_masked", "lung_crop"]
     assert pd.read_csv(tmp_path / "comparison.csv").columns.tolist() == ["mode", *values]
 
 
@@ -161,6 +161,29 @@ def test_evaluation_normalizes_modern_checkpoint_configuration(
     assert normalized == configuration
     assert normalized is not configuration
     assert not capsys.readouterr().out
+
+
+def test_evaluation_defaults_missing_soft_mask_factor_only_for_soft_mode(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    normalized = normalize_checkpoint_configuration({
+        "input_mode": "soft_masked", "classifier_image_size": 224,
+        "mask_threshold": .5, "lung_crop_padding": 0,
+    })
+
+    assert normalized["soft_mask_outside_factor"] == .20
+    assert "soft_mask_outside_factor" in capsys.readouterr().out
+
+
+def test_evaluation_preserves_and_validates_explicit_soft_mask_factor() -> None:
+    configuration = {
+        "input_mode": "soft_masked", "classifier_image_size": 224,
+        "mask_threshold": .5, "lung_crop_padding": 0,
+        "soft_mask_outside_factor": .35,
+    }
+    assert normalize_checkpoint_configuration(configuration) == configuration
+    with pytest.raises(ValueError, match="soft_mask_outside_factor"):
+        normalize_checkpoint_configuration({**configuration, "soft_mask_outside_factor": 1.01})
 
 
 def test_evaluation_normalizes_missing_legacy_input_mode(

@@ -339,7 +339,7 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
         if not isinstance(state, Mapping) or not isinstance(state.get("model_state_dict"), Mapping): raise ValueError(f"{name} checkpoint lacks model_state_dict")
         config = _classifier_configuration(checkpoint, state); mode = InputMode(config["input_mode"])
         if name == "original" and mode is not InputMode.ORIGINAL: raise ValueError("Original checkpoint does not declare original input mode")
-        if name == "hard_masked" and mode is not InputMode.HARD_MASKED: raise ValueError("Hard-masked checkpoint does not declare hard_masked input mode")
+        if name == "hard_masked" and mode not in {InputMode.HARD_MASKED, InputMode.SOFT_MASKED}: raise ValueError("Guided checkpoint must declare hard_masked or soft_masked input mode")
         model = create_model(config["backbone"], pretrained=False); model.load_state_dict(state["model_state_dict"], strict=True); model.to(device).eval()
         _, transform = _transforms(int(config["classifier_image_size"]), str(config["preprocessing"]))
         layer = resolve_gradcam_target_layer(model); states[name] = (model, config, mode, transform, layer); target_info[name] = gradcam_target_metadata(model, layer)
@@ -358,9 +358,9 @@ def evaluate_rsna_gradcam_localization(*, manifest: Path, bounding_boxes: Path, 
             if (patient, name) in completed: continue
             tensor = prepared = heatmap = None; oom_error = False
             try:
-                if mode is InputMode.HARD_MASKED:
+                if mode is not InputMode.ORIGINAL:
                     if probability_mask is None: probability_mask = segmenter.predict_proba(original)  # exactly once per case
-                    prepared = prepare_classifier_image(original, mode, probability_mask=probability_mask, threshold=float(config["mask_threshold"]), crop_padding=int(config["lung_crop_padding"]), output_size=int(config["classifier_image_size"]))
+                    prepared = prepare_classifier_image(original, mode, probability_mask=probability_mask, threshold=float(config["mask_threshold"]), crop_padding=int(config["lung_crop_padding"]), soft_mask_outside_factor=float(config.get("soft_mask_outside_factor", 0.20)), output_size=int(config["classifier_image_size"]))
                 else: prepared = prepare_classifier_image(original, mode, output_size=int(config["classifier_image_size"]))
                 tensor = transform(prepared.convert("RGB")).unsqueeze(0).to(device)
                 with GradCAM(model, layer) as gradcam: probability, heatmap = gradcam(tensor, (height, width))

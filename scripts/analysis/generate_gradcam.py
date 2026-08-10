@@ -88,8 +88,8 @@ def _load_classifier(checkpoint: Path, device: torch.device) -> tuple[torch.nn.M
     configuration = normalize_checkpoint_configuration(
         state["configuration"], load_adjacent_experiment_configuration(checkpoint)
     )
-    if configuration.get("input_mode") != InputMode.HARD_MASKED.value:
-        raise ValueError("This analysis supports only a hard_masked classifier checkpoint.")
+    if configuration.get("input_mode") not in {InputMode.HARD_MASKED.value, InputMode.SOFT_MASKED.value}:
+        raise ValueError("This analysis supports only a hard_masked or soft_masked classifier checkpoint.")
     model_name = str(configuration.get("model", "densenet121"))
     model = create_model(model_name, pretrained=False)
     model.load_state_dict(state["model_state_dict"], strict=True)
@@ -177,8 +177,9 @@ def generate_gradcam_analysis(
     with tempfile.TemporaryDirectory() as temporary:
         dataset = CheXpertPneumoniaDataset(
             resolved_root, _case_manifest(cases, Path(temporary)), "test", _validation_transform(image_size),
-            input_mode=InputMode.HARD_MASKED, lung_segmenter=segmenter, mask_cache=cache,
+            input_mode=InputMode(configuration["input_mode"]), lung_segmenter=segmenter, mask_cache=cache,
             mask_threshold=mask_threshold, lung_crop_padding=int(configuration.get("lung_crop_padding", 0)),
+            soft_mask_outside_factor=float(configuration.get("soft_mask_outside_factor", 0.20)),
             classifier_image_size=image_size, allow_absolute_image_paths=True,
         )
         probe = dataset[0]["image"].unsqueeze(0).to(resolved_device)
@@ -194,8 +195,9 @@ def generate_gradcam_analysis(
                 with Image.open(source) as opened:
                     original = opened.convert("L").copy()
                 mask = segmenter.predict(original, threshold=mask_threshold).numpy()
-                hard_masked = prepare_classifier_image(
-                    original, InputMode.HARD_MASKED, segmenter=segmenter, threshold=mask_threshold,
+                guided_image = prepare_classifier_image(
+                    original, InputMode(configuration["input_mode"]), segmenter=segmenter, threshold=mask_threshold,
+                    soft_mask_outside_factor=float(configuration.get("soft_mask_outside_factor", 0.20)),
                     probability_mask=segmenter.predict_proba(original),
                 )
                 cam = gradcam.generate(sample["image"].unsqueeze(0).to(resolved_device), case.prediction)
@@ -205,8 +207,8 @@ def generate_gradcam_analysis(
                 focus = activation_localisation(cam, resized_mask)
                 stem = f"{case.category}_{index:02d}_{Path(case.image_path).stem}"
                 png_path, pdf_path = output_directory / "cases" / f"{stem}.png", output_directory / "cases" / f"{stem}.pdf"
-                save_case_figure(png_path, original, mask, hard_masked, cam, case)
-                save_case_figure(pdf_path, original, mask, hard_masked, cam, case)
+                save_case_figure(png_path, original, mask, guided_image, cam, case, input_mode=configuration["input_mode"])
+                save_case_figure(pdf_path, original, mask, guided_image, cam, case, input_mode=configuration["input_mode"])
                 category_figures[case.category].append(png_path)
                 manifest_rows.append({
                     "image_path": case.image_path, "category": case.category, "label": case.label,
@@ -229,7 +231,8 @@ def generate_gradcam_analysis(
     (output_directory / "analysis_metadata.json").write_text(json.dumps({
         "classifier_checkpoint": str(classifier_checkpoint), "segmentation_checkpoint": str(segmentation_checkpoint),
         "target_layer": layer_name, "cases_per_category": cases_per_category, "threshold": threshold,
-        "mask_threshold": mask_threshold, "seed": seed, "device": device,
+        "mask_threshold": mask_threshold, "input_mode": configuration["input_mode"], "seed": seed, "device": device,
+        **({"soft_mask_outside_factor": float(configuration.get("soft_mask_outside_factor", 0.20))} if configuration["input_mode"] == InputMode.SOFT_MASKED.value else {}),
     }, indent=2))
     return manifest, summary, layer_name
 

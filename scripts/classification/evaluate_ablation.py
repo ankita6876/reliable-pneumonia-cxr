@@ -83,8 +83,11 @@ def evaluate_ablation(
         ])
         dataset = CheXpertPneumoniaDataset(
             csv.parent.resolve(), manifest, "validation", transform, mode, segmenter,
-            MaskCache(output_directory / "mask_cache") if segmenter else None,
-            float(configuration["mask_threshold"]), int(configuration["lung_crop_padding"]), size,
+            mask_cache=MaskCache(output_directory / "mask_cache") if segmenter else None,
+            mask_threshold=float(configuration["mask_threshold"]),
+            lung_crop_padding=int(configuration["lung_crop_padding"]),
+            classifier_image_size=size,
+            soft_mask_outside_factor=float(configuration.get("soft_mask_outside_factor", 0.20)),
         )
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
         model = create_model("densenet121", pretrained=False)

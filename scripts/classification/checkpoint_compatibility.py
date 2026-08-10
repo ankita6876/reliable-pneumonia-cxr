@@ -176,17 +176,29 @@ def normalize_checkpoint_configuration(
         normalized[field] = value
         print(f"WARNING: Checkpoint configuration lacks {field!r}; using {value!r} from {source}.")
 
+    # This Phase-5 setting is meaningful only for soft-masked classifiers.
+    # Do not alter the normalized shape of historical original, hard-masked,
+    # or lung-crop checkpoint configurations.
+    if normalized.get("input_mode") == InputMode.SOFT_MASKED.value and "soft_mask_outside_factor" not in normalized:
+        normalized["soft_mask_outside_factor"] = 0.20
+        print("WARNING: Checkpoint configuration lacks 'soft_mask_outside_factor'; using 0.2 from verified Phase-5 default.")
+
     errors: list[str] = []
     try:
         InputMode(str(normalized["input_mode"]))
     except ValueError:
-        errors.append("input_mode (expected original, hard_masked, or lung_crop)")
+        errors.append("input_mode (expected original, hard_masked, soft_masked, or lung_crop)")
     if not _is_positive_integer(normalized["classifier_image_size"]):
         errors.append("classifier_image_size (expected a positive integer)")
     if not _is_valid_mask_threshold(normalized["mask_threshold"]):
         errors.append("mask_threshold (expected a number strictly between 0 and 1)")
     if not _is_non_negative_integer(normalized["lung_crop_padding"]):
         errors.append("lung_crop_padding (expected a non-negative integer)")
+    if (
+        normalized.get("input_mode") == InputMode.SOFT_MASKED.value
+        and not _is_unit_interval(normalized.get("soft_mask_outside_factor"))
+    ):
+        errors.append("soft_mask_outside_factor (expected a number between 0 and 1 inclusive)")
     if errors:
         raise ValueError(
             "Checkpoint configuration has unresolved evaluator-required fields: "
@@ -218,5 +230,12 @@ def _is_non_negative_integer(value: object) -> bool:
     try:
         integer = int(value)
         return integer >= 0 and float(value) == integer
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _is_unit_interval(value: object) -> bool:
+    try:
+        return 0.0 <= float(value) <= 1.0
     except (TypeError, ValueError, OverflowError):
         return False

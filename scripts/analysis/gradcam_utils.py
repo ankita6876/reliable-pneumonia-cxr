@@ -142,9 +142,10 @@ def save_case_figure(
     output_path: Path,
     original: Image.Image,
     mask: np.ndarray,
-    hard_masked: Image.Image,
+    guided_image: Image.Image,
     cam: np.ndarray,
     case: SelectedCase,
+    input_mode: str = "hard_masked",
 ) -> None:
     """Save one annotated six-panel explanation as a 300-DPI image or PDF."""
     original_array = np.asarray(original.convert("L"))
@@ -155,8 +156,8 @@ def save_case_figure(
     axes[0].set_title("Original chest X-ray")
     axes[1].imshow(mask, cmap="gray", vmin=0, vmax=1)
     axes[1].set_title("Lung mask")
-    axes[2].imshow(np.asarray(hard_masked.convert("L")), cmap="gray")
-    axes[2].set_title("Hard-masked input")
+    axes[2].imshow(np.asarray(guided_image.convert("L")), cmap="gray")
+    axes[2].set_title("Soft-masked input" if input_mode == "soft_masked" else "Hard-masked input")
     axes[3].imshow(cam, cmap="magma", vmin=0, vmax=1)
     axes[3].set_title("Grad-CAM")
     axes[4].imshow(original_array, cmap="gray")

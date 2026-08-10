@@ -130,7 +130,7 @@ def test_gradcam_rejects_invalid_explicit_input_mode(
     }
     monkeypatch.setattr(generate_gradcam.torch, "load", lambda *args, **kwargs: state)
 
-    with pytest.raises(ValueError, match="input_mode.*expected original, hard_masked, or lung_crop"):
+    with pytest.raises(ValueError, match="input_mode.*expected original, hard_masked, soft_masked, or lung_crop"):
         generate_gradcam._load_classifier(checkpoint, torch.device("cpu"))
 
 

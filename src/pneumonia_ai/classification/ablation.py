@@ -47,6 +47,7 @@ class AblationConfig:
     num_workers: int = 0
     lung_crop_padding: int = 0
     mask_threshold: float = 0.5
+    soft_mask_outside_factor: float = 0.20
 
 
 def run_ablation(config: AblationConfig) -> Path:
@@ -76,6 +77,7 @@ def run_ablation(config: AblationConfig) -> Path:
         "weight_decay": config.weight_decay,
         "seed": config.seed,
         "mask_threshold": config.mask_threshold,
+        "soft_mask_outside_factor": config.soft_mask_outside_factor,
         "lung_crop_padding": config.lung_crop_padding,
         "segmentation_checkpoint": _checkpoint_identity(config.segmentation_checkpoint),
         "splits_csv": config.splits_csv.name,
@@ -93,6 +95,7 @@ def run_ablation(config: AblationConfig) -> Path:
             lung_segmenter=segmenter,
             mask_cache=cache,
             mask_threshold=config.mask_threshold,
+            soft_mask_outside_factor=config.soft_mask_outside_factor,
             lung_crop_padding=config.lung_crop_padding,
             classifier_image_size=config.classifier_image_size,
             allow_absolute_image_paths=True,
@@ -106,6 +109,7 @@ def run_ablation(config: AblationConfig) -> Path:
             lung_segmenter=segmenter,
             mask_cache=cache,
             mask_threshold=config.mask_threshold,
+            soft_mask_outside_factor=config.soft_mask_outside_factor,
             lung_crop_padding=config.lung_crop_padding,
             classifier_image_size=config.classifier_image_size,
             allow_absolute_image_paths=True,
@@ -130,9 +134,15 @@ def _validate_config(config: AblationConfig) -> InputMode:
     try:
         mode = InputMode(config.input_mode)
     except ValueError as error:
-        raise ValueError("input_mode must be original, hard_masked, or lung_crop.") from error
+        raise ValueError("input_mode must be original, hard_masked, soft_masked, or lung_crop.") from error
     if mode is not InputMode.ORIGINAL and config.segmentation_checkpoint is None:
-        raise ValueError("hard_masked and lung_crop modes require segmentation_checkpoint.")
+        raise ValueError("hard_masked, soft_masked, and lung_crop modes require segmentation_checkpoint.")
+    try:
+        valid_soft_factor = not isinstance(config.soft_mask_outside_factor, bool) and 0.0 <= float(config.soft_mask_outside_factor) <= 1.0
+    except (TypeError, ValueError, OverflowError):
+        valid_soft_factor = False
+    if not valid_soft_factor:
+        raise ValueError("soft_mask_outside_factor must be between 0 and 1 inclusive.")
     if config.batch_size <= 0 or config.epochs <= 0 or config.classifier_image_size <= 0:
         raise ValueError("batch_size, epochs, and classifier_image_size must be positive.")
     if config.learning_rate <= 0 or config.weight_decay < 0 or config.num_workers < 0:
@@ -191,6 +201,7 @@ def _write_metadata(directory: Path, effective: dict[str, object], config: Ablat
         "device": config.device,
         "label_strategy": UNCERTAIN_LABEL_STRATEGY,
         "segmentation_checkpoint": effective["segmentation_checkpoint"],
+        "soft_mask_outside_factor": effective["soft_mask_outside_factor"],
         "splits_csv": effective["splits_csv"],
         "image_root": effective["image_root"],
     }

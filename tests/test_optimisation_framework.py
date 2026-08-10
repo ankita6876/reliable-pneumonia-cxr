@@ -53,6 +53,14 @@ def test_a4_original_control_differs_only_by_input_mode() -> None:
     } == {"experiment", "input_mode"}
 
 
+def test_a4_soft_masked_preserves_a4_controls_and_records_frozen_factor() -> None:
+    root = Path(__file__).resolve().parents[1] / "configs" / "classification_optimisation"
+    hard = load_config(root / "A4_pretrained_progressive.yaml")
+    soft = load_config(root / "A4_soft_masked.yaml")
+    assert soft.input_mode == "soft_masked" and soft.mask_threshold == .5 and soft.soft_mask_outside_factor == .20
+    assert configuration_differences(hard, soft) == {"input_mode"}
+
+
 def test_a4_original_control_transform_is_identical_to_a4() -> None:
     root = Path(__file__).resolve().parents[1] / "configs" / "classification_optimisation"
     hard, original = load_config(root / "A4_pretrained_progressive.yaml"), load_config(root / "A4_original_control.yaml")
@@ -96,6 +104,14 @@ def test_unsupported_augmentation_fails_clearly(tmp_path: Path) -> None:
     path = tmp_path / "invalid.yaml"
     path.write_text("experiment: invalid\naugmentation: light\n", encoding="utf-8")
     with pytest.raises(ValueError, match="none or historical"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("factor", ("-0.01", "1.01"))
+def test_optimisation_soft_factor_validation_is_enforced(tmp_path: Path, factor: str) -> None:
+    path = tmp_path / "invalid-soft-mask.yaml"
+    path.write_text(f"experiment: invalid\ninput_mode: soft_masked\nsoft_mask_outside_factor: {factor}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="soft_mask_outside_factor"):
         load_config(path)
 
 

@@ -196,8 +196,12 @@ def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, outp
         raise ValueError("Segmentation checkpoint SHA-256 does not match --expected-segmentation-sha256")
     model = create_model(config["backbone"], pretrained=False); model.load_state_dict(state["model_state_dict"], strict=True); model.to(device).eval()
     size, threshold, padding = int(config["classifier_image_size"]), float(config["mask_threshold"]), int(config["lung_crop_padding"])
+    soft_mask_outside_factor = (
+        float(config.get("soft_mask_outside_factor", 0.20))
+        if mode is InputMode.SOFT_MASKED else None
+    )
     if mode is not InputMode.ORIGINAL and threshold != 0.5:
-        raise ValueError(f"Historical hard-mask threshold must be 0.5; checkpoint specifies {threshold}")
+        raise ValueError(f"Frozen mask threshold must be 0.5 for guided checkpoints; checkpoint specifies {threshold}")
     _, transform = _transforms(size, config["preprocessing"])
     segmenter = FrozenLungSegmenter(segmentation_checkpoint, device) if segmentation_checkpoint else None
     cache = None
@@ -213,7 +217,7 @@ def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, outp
                 if segmenter and cache:
                     key = cache.key(source, segmentation_checkpoint, threshold, segmenter.image_size); probability = cache.get(key)
                     if probability is None: probability = segmenter.predict_proba(image); cache.set(key, probability, source_path=source)
-                    image = prepare_classifier_image(image, mode, probability_mask=probability, threshold=threshold, crop_padding=padding, output_size=size)
+                    image = prepare_classifier_image(image, mode, probability_mask=probability, threshold=threshold, crop_padding=padding, soft_mask_outside_factor=soft_mask_outside_factor if soft_mask_outside_factor is not None else 0.20, output_size=size)
                 else: image = prepare_classifier_image(image, mode, output_size=size)
                 images.append(transform(image.convert("RGB")))
             logits = model(torch.stack(images).to(device)).view(-1).detach().cpu(); probabilities = torch.sigmoid(logits)
@@ -223,6 +227,7 @@ def predict_external(*, manifest: Path, image_root: Path, checkpoint: Path, outp
             if processed == len(frame) or processed % 500 == 0: print(f"Processed {processed}/{len(frame)}", flush=True)
     output.parent.mkdir(parents=True, exist_ok=True); predictions = pd.DataFrame(rows, columns=OUTPUT_COLUMNS); predictions.to_csv(output, index=False)
     metadata = {"manifest_path": str(manifest.resolve()), "image_root": str(image_root.resolve()), "checkpoint_path": str(checkpoint.resolve()), "checkpoint_sha256": _sha256(checkpoint), "segmentation_checkpoint_path": str(segmentation_checkpoint.resolve()) if segmentation_checkpoint else None, "segmentation_checkpoint_sha256": segmentation_sha256, "expected_segmentation_sha256": expected_segmentation_sha256, "input_mode": mode.value, "backbone": config["backbone"], "preprocessing": config["preprocessing"], "classifier_image_size": size, "mask_threshold": threshold, "lung_crop_padding": padding, "device": device, "batch_size": batch_size, "num_workers": num_workers, "seed": seed, "max_samples": max_samples, "selected_patient_ids": frame.patient_id.astype(str).tolist(), "selected_case_ids": predictions.case_id.astype(str).tolist(), "row_count": len(predictions), "positive_count": int(predictions.binary_target.sum()), "negative_count": int((predictions.binary_target == 0).sum()), "start_time": started.isoformat(), "end_time": datetime.now(timezone.utc).isoformat(), "python_version": platform.python_version(), "pytorch_version": torch.__version__, "pydicom_version": pydicom.__version__, "git_commit": _git_commit()}
+    if soft_mask_outside_factor is not None: metadata["soft_mask_outside_factor"] = soft_mask_outside_factor
     output.with_name(output.stem + "_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return predictions
 

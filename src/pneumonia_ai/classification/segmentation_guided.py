@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 class InputMode(StrEnum):
     ORIGINAL = "original"
     HARD_MASKED = "hard_masked"
+    SOFT_MASKED = "soft_masked"
     LUNG_CROP = "lung_crop"
 
 
@@ -25,6 +26,7 @@ def prepare_classifier_image(
     *,
     segmenter: FrozenLungSegmenter | None = None,
     threshold: float = 0.5,
+    soft_mask_outside_factor: float = 0.20,
     crop_padding: int = 0,
     output_size: int | tuple[int, int] | None = None,
     probability_mask: torch.Tensor | None = None,
@@ -37,10 +39,12 @@ def prepare_classifier_image(
     try:
         resolved_mode = InputMode(mode)
     except ValueError as error:
-        raise ValueError("mode must be one of: original, hard_masked, lung_crop.") from error
+        raise ValueError("mode must be one of: original, hard_masked, soft_masked, lung_crop.") from error
     size = _validate_output_size(output_size)
     if crop_padding < 0:
         raise ValueError("crop_padding must be non-negative.")
+    if isinstance(soft_mask_outside_factor, bool) or not _is_unit_interval(soft_mask_outside_factor):
+        raise ValueError("soft_mask_outside_factor must be between 0 and 1 inclusive.")
     grayscale = image.convert("L")
     if resolved_mode is InputMode.ORIGINAL:
         return _resize(grayscale, size)
@@ -56,6 +60,12 @@ def prepare_classifier_image(
     if resolved_mode is InputMode.HARD_MASKED:
         array[~mask] = 0
         return _resize(Image.fromarray(array, mode="L"), size)
+    if resolved_mode is InputMode.SOFT_MASKED:
+        # Work in float before the explicit uint8 conversion so the attenuation
+        # is deterministic and never relies on NumPy's in-place cast semantics.
+        softened = array.astype(np.float32)
+        softened[~mask] *= float(soft_mask_outside_factor)
+        return _resize(Image.fromarray(softened.astype(np.uint8), mode="L"), size)
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return _resize(grayscale, size)
@@ -75,3 +85,10 @@ def _validate_output_size(value: int | tuple[int, int] | None) -> tuple[int, int
 
 def _resize(image: Image.Image, size: tuple[int, int] | None) -> Image.Image:
     return image.copy() if size is None else image.resize(size, Image.Resampling.BILINEAR)
+
+
+def _is_unit_interval(value: object) -> bool:
+    try:
+        return 0.0 <= float(value) <= 1.0
+    except (TypeError, ValueError, OverflowError):
+        return False

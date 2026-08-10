@@ -105,3 +105,15 @@ def test_expected_segmentation_sha256_is_enforced(tmp_path, monkeypatch):
 def test_cli_preserves_original_and_adds_controls():
     args=external.parse_args(["--manifest","m.csv","--image-root","images","--checkpoint","m.pt","--output","p.csv","--device","cpu","--max-samples","32","--seed","42"])
     assert args.max_samples==32 and args.seed==42 and args.segmentation_checkpoint is None
+
+
+def test_checkpoint_normalization_defaults_soft_factor_for_historical_checkpoints(tmp_path):
+    checkpoint = tmp_path / "model.pt"; checkpoint.touch()
+    normalized = external._classifier_configuration(checkpoint, checkpoint_config("hard_masked"))
+    assert "soft_mask_outside_factor" not in normalized
+
+
+def test_checkpoint_normalization_accepts_soft_masked_mode(tmp_path):
+    checkpoint = tmp_path / "model.pt"; checkpoint.touch()
+    normalized = external._classifier_configuration(checkpoint, checkpoint_config("soft_masked"))
+    assert normalized["input_mode"] == "soft_masked" and normalized["soft_mask_outside_factor"] == .20

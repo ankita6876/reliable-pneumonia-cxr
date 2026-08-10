@@ -13,6 +13,8 @@ import yaml
 class OptimisationConfig:
     experiment: str
     input_mode: str = "hard_masked"
+    mask_threshold: float = 0.5
+    soft_mask_outside_factor: float = 0.20
     seed: int = 42
     backbone: str = "densenet121"
     pretrained: bool = False
@@ -70,8 +72,12 @@ def load_config(path: Path) -> OptimisationConfig:
         config = OptimisationConfig(**config_values)
     if config.augmentation not in {"none", "historical"}:
         raise ValueError("augmentation must be none or historical.")
-    if config.input_mode not in {"original", "hard_masked"}:
-        raise ValueError("input_mode must be original or hard_masked.")
+    if config.input_mode not in {"original", "hard_masked", "soft_masked"}:
+        raise ValueError("input_mode must be original, hard_masked, or soft_masked.")
+    if isinstance(config.mask_threshold, bool) or float(config.mask_threshold) != 0.5:
+        raise ValueError("mask_threshold must be the frozen value 0.5.")
+    if isinstance(config.soft_mask_outside_factor, bool) or not _is_unit_interval(config.soft_mask_outside_factor):
+        raise ValueError("soft_mask_outside_factor must be between 0 and 1 inclusive.")
     if config.rotation_degrees < 0:
         raise ValueError("rotation_degrees must be non-negative.")
     if config.augmentation == "none" and (config.horizontal_flip or config.rotation_degrees):
@@ -85,6 +91,13 @@ def load_config(path: Path) -> OptimisationConfig:
             "epochs, batch_size, and gradient_accumulation must be positive."
         )
     return config
+
+
+def _is_unit_interval(value: object) -> bool:
+    try:
+        return 0.0 <= float(value) <= 1.0
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def configuration_differences(left: OptimisationConfig, right: OptimisationConfig) -> set[str]:

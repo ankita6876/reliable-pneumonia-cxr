@@ -44,6 +44,7 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         lung_crop_padding: int = 0,
         classifier_image_size: int | tuple[int, int] | None = None,
         allow_absolute_image_paths: bool = False,
+        soft_mask_outside_factor: float = 0.20,
     ) -> None:
         """Load one manifest split and validate its image references.
 
@@ -128,14 +129,15 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         try:
             self.input_mode = InputMode(input_mode)
         except ValueError as error:
-            raise DatasetValidationError("input_mode must be original, hard_masked, or lung_crop.") from error
+            raise DatasetValidationError("input_mode must be original, hard_masked, soft_masked, or lung_crop.") from error
         if self.input_mode is not InputMode.ORIGINAL and lung_segmenter is None and mask_cache is None:
             raise DatasetValidationError(
-                "hard_masked and lung_crop input modes require lung_segmenter or mask_cache."
+                "hard_masked, soft_masked, and lung_crop input modes require lung_segmenter or mask_cache."
             )
         self.lung_segmenter = lung_segmenter
         self.mask_cache = mask_cache
         self.mask_threshold = mask_threshold
+        self.soft_mask_outside_factor = soft_mask_outside_factor
         self.lung_crop_padding = lung_crop_padding
         self.classifier_image_size = classifier_image_size
 
@@ -153,6 +155,7 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             image = prepare_classifier_image(
                 image, self.input_mode, segmenter=self.lung_segmenter,
                 threshold=self.mask_threshold, crop_padding=self.lung_crop_padding,
+                soft_mask_outside_factor=self.soft_mask_outside_factor,
                 output_size=self.classifier_image_size, probability_mask=probability_mask,
             )
         if self.input_mode is not InputMode.ORIGINAL:
