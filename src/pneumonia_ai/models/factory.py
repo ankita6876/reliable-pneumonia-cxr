@@ -6,6 +6,7 @@ from torch import nn
 
 SUPPORTED_MODEL_NAMES = (
     "densenet121",
+    "efficientnet_b0",
     "convnext_tiny",
     "tf_efficientnetv2_s",
     "xrv_densenet121_all",
