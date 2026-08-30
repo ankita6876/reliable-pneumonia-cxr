@@ -80,13 +80,22 @@ def resolved_transform_metadata(config: OptimisationConfig) -> dict[str, object]
     }
 
 
+def _is_classifier_parameter(name: str) -> bool:
+    """Return whether a parameter belongs to a supported classification head.
+
+    timm DenseNet/EfficientNet models expose their binary head as
+    ``classifier.*``, while timm ResNet models expose it as ``fc.*``.
+    """
+    return name.startswith(("classifier.", "fc."))
+
+
 def configure_fine_tuning(model: nn.Module, freeze_backbone: bool) -> None:
     """Freeze/unfreeze backbone while keeping frozen BatchNorm modules in evaluation mode."""
     for name, parameter in model.named_parameters():
-        parameter.requires_grad = not freeze_backbone or name.startswith("classifier")
+        parameter.requires_grad = not freeze_backbone or _is_classifier_parameter(name)
     if freeze_backbone:
         for name, module in model.named_modules():
-            if not name.startswith("classifier") and isinstance(
+            if not _is_classifier_parameter(name) and isinstance(
                 module, nn.modules.batchnorm._BatchNorm
             ):
                 module.eval()
@@ -99,12 +108,12 @@ def differential_parameter_groups(
     head = [
         p
         for n, p in model.named_parameters()
-        if n.startswith("classifier") and p.requires_grad
+        if _is_classifier_parameter(n) and p.requires_grad
     ]
     body = [
         p
         for n, p in model.named_parameters()
-        if not n.startswith("classifier") and p.requires_grad
+        if not _is_classifier_parameter(n) and p.requires_grad
     ]
     groups: list[dict[str, object]] = []
     if body:
