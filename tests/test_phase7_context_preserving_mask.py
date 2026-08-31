@@ -253,10 +253,13 @@ context_background_factor: 0.20
     "field,value",
     [
         ("context_dilation_radius", 11),
+        ("context_dilation_radius", 21),
         ("context_feather_radius", 7),
         ("context_background_factor", 0.30),
     ],
 )
+
+
 def test_context_config_refuses_unplanned_parameter_sweep(
     tmp_path: Path,
     field,
@@ -285,3 +288,85 @@ def test_context_config_refuses_unplanned_parameter_sweep(
 
     with pytest.raises(ValueError, match=field):
         load_config(path)
+
+def test_context_config_accepts_predefined_twenty_pixel_fallback(tmp_path: Path):
+    path = tmp_path / "context_r20.yaml"
+
+    path.write_text(
+        """
+experiment: test_context_r20
+input_mode: context_preserving
+mask_threshold: 0.5
+context_dilation_radius: 20
+context_feather_radius: 8
+context_background_factor: 0.20
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.input_mode == "context_preserving"
+    assert config.context_dilation_radius == 20
+    assert config.context_feather_radius == 8
+    assert config.context_background_factor == 0.20
+
+
+def test_context_radius_is_measured_after_resize_to_classifier_resolution():
+    # Deliberately use a 448x448 source image and a 224x224 output.
+    # If the radius were mistakenly measured at source resolution,
+    # 12 source pixels would become only ~6 target pixels.
+    #
+    # This test therefore verifies that 12 means 12 pixels in the
+    # final 224x224 classifier coordinate system.
+
+    source_size = 448
+
+    image = Image.fromarray(
+        np.full(
+            (source_size, source_size),
+            200,
+            dtype=np.uint8,
+        )
+    )
+
+    probability = torch.zeros(
+        (source_size, source_size),
+        dtype=torch.float32,
+    )
+
+    # Central lung-like square.
+    probability[128:320, 128:320] = 1.0
+
+    output = prepare_classifier_image(
+        image,
+        mode=InputMode.CONTEXT_PRESERVING,
+        probability_mask=probability,
+        threshold=0.5,
+        output_size=(224, 224),
+        context_dilation_radius=12,
+        context_feather_radius=8,
+        context_background_factor=0.20,
+    )
+
+    array = np.asarray(output)
+
+    assert array.shape == (224, 224)
+
+    # After 448 -> 224 resize, left lung boundary is near x=64.
+    y = 112
+
+    # 12 target pixels outside boundary: should still be full strength.
+    full_context_value = int(array[y, 52])
+
+    # Around 16 target pixels outside: should lie inside feather.
+    feather_value = int(array[y, 48])
+
+    # >20 target pixels outside: should be near 20% of 200 = 40.
+    far_background_value = int(array[y, 40])
+
+    assert full_context_value >= 190
+
+    assert 40 < feather_value < 190
+
+    assert 35 <= far_background_value <= 45

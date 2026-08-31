@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 import torch
+import torch.nn.functional as F
 
 if TYPE_CHECKING:
     from pneumonia_ai.segmentation.inference import FrozenLungSegmenter
@@ -20,6 +21,27 @@ class InputMode(StrEnum):
     SOFT_MASKED = "soft_masked"
     CONTEXT_PRESERVING = "context_preserving"
     LUNG_CROP = "lung_crop"
+
+
+def _resize_probability_mask(
+    probability: torch.Tensor,
+    size: tuple[int, int],
+) -> torch.Tensor:
+    """Resize a probability mask continuously to classifier resolution."""
+    tensor = (
+        probability.detach()
+        .cpu()
+        .to(torch.float32)[None, None]
+    )
+
+    resized = F.interpolate(
+        tensor,
+        size=(size[1], size[0]),
+        mode="bilinear",
+        align_corners=False,
+    )[0, 0]
+
+    return resized
 
 
 def prepare_classifier_image(
@@ -69,6 +91,21 @@ def prepare_classifier_image(
     probability = probability_mask if probability_mask is not None else segmenter.predict_proba(grayscale)
     if probability.shape != (grayscale.height, grayscale.width):
         raise ValueError("Probability mask dimensions must match the input image.")
+    # Context-Preserving geometry is defined in classifier-input
+    # coordinates. Resize image and continuous probability mask
+    # BEFORE thresholding and distance-transform measurement.
+    #
+    # Historical Hard and Soft modes intentionally retain their
+    # previous source-resolution behavior.
+    if resolved_mode is InputMode.CONTEXT_PRESERVING and size is not None:
+        grayscale = _resize(grayscale, size)
+        probability = _resize_probability_mask(probability, size)
+
+    if tuple(probability.shape) != (grayscale.height, grayscale.width):
+        raise ValueError(
+            "Probability mask shape must match the classifier image."
+        )
+
     mask = probability.detach().cpu().numpy() >= threshold
     array = np.asarray(grayscale).copy()
     if resolved_mode is InputMode.HARD_MASKED:

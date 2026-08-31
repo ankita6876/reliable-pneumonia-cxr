@@ -91,9 +91,9 @@ def load_config(path: Path) -> OptimisationConfig:
     if isinstance(config.context_background_factor, bool) or not _is_unit_interval(config.context_background_factor):
         raise ValueError("context_background_factor must be between 0 and 1 inclusive.")
     if config.input_mode == "context_preserving":
-        if config.context_dilation_radius != 12:
+        if config.context_dilation_radius not in {12, 20}:
             raise ValueError(
-                "context_dilation_radius must be the predefined Phase-7 value 12."
+                "context_dilation_radius must be one of the predefined Phase-7 values: 12 or 20."
             )
         if config.context_feather_radius != 8:
             raise ValueError(
