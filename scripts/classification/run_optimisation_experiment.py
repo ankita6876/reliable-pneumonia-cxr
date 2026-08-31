@@ -186,7 +186,10 @@ def _development_datasets(
             mask_cache=mask_cache,
             mask_threshold=config.mask_threshold,
             soft_mask_outside_factor=config.soft_mask_outside_factor,
-            classifier_image_size=config.input_size if config.input_mode in {"hard_masked", "soft_masked"} else None,
+            context_dilation_radius=config.context_dilation_radius,
+            context_feather_radius=config.context_feather_radius,
+            context_background_factor=config.context_background_factor,
+            classifier_image_size=config.input_size if config.input_mode in {"hard_masked", "soft_masked", "context_preserving"} else None,
         ),
         CheXpertPneumoniaDataset(
             image_root, path, "validation", validation_tf,
@@ -194,7 +197,10 @@ def _development_datasets(
             mask_cache=mask_cache,
             mask_threshold=config.mask_threshold,
             soft_mask_outside_factor=config.soft_mask_outside_factor,
-            classifier_image_size=config.input_size if config.input_mode in {"hard_masked", "soft_masked"} else None,
+            context_dilation_radius=config.context_dilation_radius,
+            context_feather_radius=config.context_feather_radius,
+            context_background_factor=config.context_background_factor,
+            classifier_image_size=config.input_size if config.input_mode in {"hard_masked", "soft_masked", "context_preserving"} else None,
         ),
     )
 
@@ -357,7 +363,11 @@ def _resolve_input_dependencies(
     """
     if config.input_mode == InputMode.ORIGINAL.value:
         return InputDependencies()
-    if config.input_mode not in {InputMode.HARD_MASKED.value, InputMode.SOFT_MASKED.value}:
+    if config.input_mode not in {
+        InputMode.HARD_MASKED.value,
+        InputMode.SOFT_MASKED.value,
+        InputMode.CONTEXT_PRESERVING.value,
+    }:
         raise ValueError("input_mode must be original, hard_masked, or soft_masked.")
     segmenter, mask_cache = _masking_dependencies(
         segmentation_checkpoint, mask_cache_path, device_name, create_cache=create_cache
@@ -397,7 +407,11 @@ def _preflight(
             dependencies.segmenter,
             dependencies.mask_cache,
         )
-        if config.input_mode in {InputMode.HARD_MASKED.value, InputMode.SOFT_MASKED.value} and dependencies.segmenter is None:
+        if config.input_mode in {
+            InputMode.HARD_MASKED.value,
+            InputMode.SOFT_MASKED.value,
+            InputMode.CONTEXT_PRESERVING.value,
+        } and dependencies.segmenter is None:
             assert dependencies.mask_cache is not None
             dependencies.mask_cache.require_coverage(
                 [*train_set._resolved_image_paths, *validation_set._resolved_image_paths]
@@ -487,7 +501,11 @@ def _run_experiment_after_preflight(
     device = torch.device(device_name)
     runtime_mask_cache = (
         mask_cache_path or output / "mask_cache"
-        if config.input_mode in {InputMode.HARD_MASKED.value, InputMode.SOFT_MASKED.value}
+        if config.input_mode in {
+            InputMode.HARD_MASKED.value,
+            InputMode.SOFT_MASKED.value,
+            InputMode.CONTEXT_PRESERVING.value,
+        }
         else None
     )
     dependencies = _resolve_input_dependencies(
@@ -709,7 +727,11 @@ def run_experiment(
 ) -> Path:
     """Preflight first, then execute with safe restart and failure-state handling."""
     effective_mask_cache: Path | None = None
-    if config.input_mode in {InputMode.HARD_MASKED.value, InputMode.SOFT_MASKED.value}:
+    if config.input_mode in {
+        InputMode.HARD_MASKED.value,
+        InputMode.SOFT_MASKED.value,
+        InputMode.CONTEXT_PRESERVING.value,
+    }:
         shared_cache = output_root / "shared_mask_cache"
         effective_mask_cache = mask_cache_path or shared_cache
     # A missing shared cache is expected on the first run; segmentation will populate it.
@@ -735,8 +757,8 @@ def run_experiment(
         "dataset_split_path": str(splits_csv.resolve()), "image_root": str(image_root.resolve()),
         "label_policy": "ignore",
         "input_mode": config.input_mode,
-        "segmentation_checkpoint": str(segmentation_checkpoint.resolve()) if config.input_mode in {"hard_masked", "soft_masked"} and segmentation_checkpoint else None,
-        "segmentation_checkpoint_sha256": _file_sha256(segmentation_checkpoint) if config.input_mode in {"hard_masked", "soft_masked"} and segmentation_checkpoint else None,
+        "segmentation_checkpoint": str(segmentation_checkpoint.resolve()) if config.input_mode in {"hard_masked", "soft_masked", "context_preserving"} and segmentation_checkpoint else None,
+        "segmentation_checkpoint_sha256": _file_sha256(segmentation_checkpoint) if config.input_mode in {"hard_masked", "soft_masked", "context_preserving"} and segmentation_checkpoint else None,
         "mask_cache": str(effective_mask_cache.resolve()) if effective_mask_cache else None, "torch_version": torch.__version__,
         "device": device_name, "start_time": datetime.now(timezone.utc).isoformat(),
         "git_commit": _git_commit(),

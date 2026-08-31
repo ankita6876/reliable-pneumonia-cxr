@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 import torch
 
 if TYPE_CHECKING:
@@ -17,6 +18,7 @@ class InputMode(StrEnum):
     ORIGINAL = "original"
     HARD_MASKED = "hard_masked"
     SOFT_MASKED = "soft_masked"
+    CONTEXT_PRESERVING = "context_preserving"
     LUNG_CROP = "lung_crop"
 
 
@@ -27,6 +29,9 @@ def prepare_classifier_image(
     segmenter: FrozenLungSegmenter | None = None,
     threshold: float = 0.5,
     soft_mask_outside_factor: float = 0.20,
+    context_dilation_radius: int = 12,
+    context_feather_radius: int = 8,
+    context_background_factor: float = 0.20,
     crop_padding: int = 0,
     output_size: int | tuple[int, int] | None = None,
     probability_mask: torch.Tensor | None = None,
@@ -39,12 +44,21 @@ def prepare_classifier_image(
     try:
         resolved_mode = InputMode(mode)
     except ValueError as error:
-        raise ValueError("mode must be one of: original, hard_masked, soft_masked, lung_crop.") from error
+        raise ValueError(
+            "mode must be one of: original, hard_masked, soft_masked, "
+            "context_preserving, lung_crop."
+        ) from error
     size = _validate_output_size(output_size)
     if crop_padding < 0:
         raise ValueError("crop_padding must be non-negative.")
     if isinstance(soft_mask_outside_factor, bool) or not _is_unit_interval(soft_mask_outside_factor):
         raise ValueError("soft_mask_outside_factor must be between 0 and 1 inclusive.")
+    if isinstance(context_dilation_radius, bool) or not isinstance(context_dilation_radius, int) or context_dilation_radius < 0:
+        raise ValueError("context_dilation_radius must be a non-negative integer.")
+    if isinstance(context_feather_radius, bool) or not isinstance(context_feather_radius, int) or context_feather_radius < 0:
+        raise ValueError("context_feather_radius must be a non-negative integer.")
+    if isinstance(context_background_factor, bool) or not _is_unit_interval(context_background_factor):
+        raise ValueError("context_background_factor must be between 0 and 1 inclusive.")
     grayscale = image.convert("L")
     if resolved_mode is InputMode.ORIGINAL:
         return _resize(grayscale, size)
@@ -66,6 +80,47 @@ def prepare_classifier_image(
         softened = array.astype(np.float32)
         softened[~mask] *= float(soft_mask_outside_factor)
         return _resize(Image.fromarray(softened.astype(np.uint8), mode="L"), size)
+    if resolved_mode is InputMode.CONTEXT_PRESERVING:
+        # Preserve the thresholded lungs and a predefined peri-lung margin at
+        # full intensity. Outside that margin, smoothly transition to the
+        # predefined far-background retention factor.
+        #
+        # Euclidean distance is used rather than repeated square dilation so the
+        # anatomical margin is approximately isotropic in image coordinates.
+        distance_outside = ndimage.distance_transform_edt(~mask)
+
+        retention = np.full(
+            mask.shape,
+            float(context_background_factor),
+            dtype=np.float32,
+        )
+
+        full_context = distance_outside <= float(context_dilation_radius)
+        retention[full_context] = 1.0
+
+        if context_feather_radius > 0:
+            feather = (
+                (distance_outside > float(context_dilation_radius))
+                & (
+                    distance_outside
+                    < float(context_dilation_radius + context_feather_radius)
+                )
+            )
+            t = (
+                distance_outside[feather] - float(context_dilation_radius)
+            ) / float(context_feather_radius)
+
+            # Raised-cosine interpolation gives a continuous transition with
+            # zero slope at both ends of the feather region.
+            smooth = 0.5 * (1.0 + np.cos(np.pi * t))
+            retention[feather] = (
+                float(context_background_factor)
+                + (1.0 - float(context_background_factor)) * smooth
+            )
+
+        contextual = array.astype(np.float32) * retention
+        contextual = np.clip(contextual, 0.0, 255.0).astype(np.uint8)
+        return _resize(Image.fromarray(contextual, mode="L"), size)
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return _resize(grayscale, size)

@@ -15,6 +15,9 @@ class OptimisationConfig:
     input_mode: str = "hard_masked"
     mask_threshold: float = 0.5
     soft_mask_outside_factor: float = 0.20
+    context_dilation_radius: int = 12
+    context_feather_radius: int = 8
+    context_background_factor: float = 0.20
     seed: int = 42
     backbone: str = "densenet121"
     pretrained: bool = False
@@ -72,12 +75,34 @@ def load_config(path: Path) -> OptimisationConfig:
         config = OptimisationConfig(**config_values)
     if config.augmentation not in {"none", "historical"}:
         raise ValueError("augmentation must be none or historical.")
-    if config.input_mode not in {"original", "hard_masked", "soft_masked"}:
-        raise ValueError("input_mode must be original, hard_masked, or soft_masked.")
+    if config.input_mode not in {"original", "hard_masked", "soft_masked", "context_preserving"}:
+        raise ValueError(
+            "input_mode must be original, hard_masked, soft_masked, "
+            "or context_preserving."
+        )
     if isinstance(config.mask_threshold, bool) or float(config.mask_threshold) != 0.5:
         raise ValueError("mask_threshold must be the frozen value 0.5.")
     if isinstance(config.soft_mask_outside_factor, bool) or not _is_unit_interval(config.soft_mask_outside_factor):
         raise ValueError("soft_mask_outside_factor must be between 0 and 1 inclusive.")
+    if isinstance(config.context_dilation_radius, bool) or not isinstance(config.context_dilation_radius, int) or config.context_dilation_radius < 0:
+        raise ValueError("context_dilation_radius must be a non-negative integer.")
+    if isinstance(config.context_feather_radius, bool) or not isinstance(config.context_feather_radius, int) or config.context_feather_radius < 0:
+        raise ValueError("context_feather_radius must be a non-negative integer.")
+    if isinstance(config.context_background_factor, bool) or not _is_unit_interval(config.context_background_factor):
+        raise ValueError("context_background_factor must be between 0 and 1 inclusive.")
+    if config.input_mode == "context_preserving":
+        if config.context_dilation_radius != 12:
+            raise ValueError(
+                "context_dilation_radius must be the predefined Phase-7 value 12."
+            )
+        if config.context_feather_radius != 8:
+            raise ValueError(
+                "context_feather_radius must be the predefined Phase-7 value 8."
+            )
+        if float(config.context_background_factor) != 0.20:
+            raise ValueError(
+                "context_background_factor must be the predefined Phase-7 value 0.20."
+            )
     if config.rotation_degrees < 0:
         raise ValueError("rotation_degrees must be non-negative.")
     if config.augmentation == "none" and (config.horizontal_flip or config.rotation_degrees):
