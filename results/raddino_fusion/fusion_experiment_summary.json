@@ -1,0 +1,32 @@
+{
+  "experiment": "RAD-DINO global + lung feature fusion",
+  "feature_dimensions": {
+    "global": 768,
+    "lung": 768,
+    "fusion": 1536
+  },
+  "development_samples": {
+    "train": 4581,
+    "validation": 979
+  },
+  "classifier": "StandardScaler + LogisticRegression",
+  "solver": "liblinear",
+  "random_state": 42,
+  "regularization_selection": {
+    "method": "5-fold stratified cross-validation on training split only",
+    "candidate_C": [
+      0.0001,
+      0.001,
+      0.01,
+      0.1,
+      1.0
+    ],
+    "selected_C": 0.001,
+    "mean_cv_auroc": 0.7937940699514746
+  },
+  "held_out_chexpert_validation": {
+    "auroc": 0.7909428450944698,
+    "auprc": 0.8811106780742786
+  },
+  "important_note": "CheXpert held-out validation was not used to select C. Regularization was selected using training-only cross-validation."
+}
