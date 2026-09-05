@@ -20,8 +20,16 @@
     "external_tuning": false
   },
   "operating_point": {
-    "threshold": 0.5414520502090454,
-    "threshold_origin": "CheXpert validation; originally selected for ResNet50 Original42 at >=0.80 specificity"
+    "threshold": 0.5850369518960012,
+    "threshold_status": "final_frozen_fusion_specific",
+    "selection_dataset": "CheXpert validation",
+    "selection_rule": "lowest fusion threshold achieving >=0.80 specificity",
+    "validation_specificity": 0.8014440433212996,
+    "validation_sensitivity": 0.6310541310541311,
+    "validation_balanced_accuracy": 0.7162490871877154,
+    "external_tuning": false,
+    "previous_original42_threshold": 0.5414520502090454,
+    "note": "The previous threshold was selected for Original42. The final threshold was derived only after the 65/35 fusion weight had been frozen, using CheXpert validation only. No test or external labels were used."
   },
   "evaluation": {
     "source_test": "CheXpert test",
@@ -30,5 +38,15 @@
       "PadChest PA/AP"
     ],
     "sensitivity_analysis": "PadChest Physician-only"
+  },
+  "calibration": {
+    "type": "raw_probabilities",
+    "posthoc_calibration": false,
+    "metrics": [
+      "Brier",
+      "NLL",
+      "ECE15"
+    ],
+    "summary": "Frozen fusion improved Brier and NLL versus Original42 on CheXpert test, RSNA, PadChest full, and PadChest Physician-only. ECE15 improved on CheXpert test and both PadChest analyses but was slightly worse on RSNA."
   }
 }

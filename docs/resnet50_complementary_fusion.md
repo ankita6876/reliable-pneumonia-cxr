@@ -137,3 +137,64 @@ Generic scripts are provided for:
 
 Large prediction files, datasets, and model checkpoints are
 intentionally excluded from Git.
+
+## Final fusion-specific operating point
+
+After the 65/35 fusion weight had been selected and frozen, a
+fusion-specific operating threshold was derived using CheXpert
+validation only.
+
+The pre-specified rule was the lowest fusion threshold achieving at
+least 80% specificity, which maximizes sensitivity subject to that
+specificity constraint.
+
+The resulting final threshold was:
+
+`0.5850369518960012`
+
+On CheXpert validation this produced:
+
+- specificity: 0.801444
+- sensitivity: 0.631054
+- balanced accuracy: 0.716249
+
+The threshold was then frozen and applied unchanged to the untouched
+CheXpert test set, RSNA, PadChest full cohort, and PadChest
+Physician-only sensitivity analysis. No test or external labels were
+used for threshold selection.
+
+At this frozen operating point, specificity was 0.750000 on CheXpert
+test, 0.802535 on RSNA, 0.934793 on PadChest full, and 0.946025 on
+PadChest Physician-only. The corresponding sensitivities were
+0.641643, 0.602794, 0.209117, and 0.172450, respectively.
+
+These results demonstrate an operating-point trade-off rather than a
+uniform improvement: the source-derived higher-specificity threshold
+substantially increases specificity on the external cohorts but can
+reduce sensitivity, particularly on PadChest.
+
+## Final raw calibration analysis
+
+Calibration was evaluated directly from the frozen model probabilities
+without fitting temperature scaling or any other post-hoc calibration
+parameter.
+
+Compared with Original42, FrozenFusion65_35 reduced both Brier score
+and negative log-likelihood on all evaluated cohorts:
+
+| Dataset | Delta Brier | Delta NLL | Delta ECE15 |
+|---|---:|---:|---:|
+| CheXpert test | -0.025423 | -0.059139 | -0.061233 |
+| RSNA | -0.003741 | -0.011905 | +0.008098 |
+| PadChest full | -0.021313 | -0.052763 | -0.024691 |
+| PadChest Physician-only | -0.011111 | -0.030294 | -0.010993 |
+
+Negative values indicate improvement.
+
+ECE15 improved on CheXpert test and both PadChest analyses, while RSNA
+ECE15 increased slightly. Therefore, the evidence supports improved
+Brier score and NLL across datasets, but not a claim of universal
+improvement for every calibration metric.
+
+The final calibration analysis used no test-set or external-domain
+parameter fitting.
