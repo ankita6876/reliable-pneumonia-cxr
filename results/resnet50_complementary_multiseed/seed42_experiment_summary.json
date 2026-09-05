@@ -1,0 +1,14 @@
+{
+  "experiment": "complementary_resnet50_seed42_reproduction",
+  "seed": 42,
+  "selection": "maximum CheXpert validation AUROC",
+  "test_used": false,
+  "external_data_used": false,
+  "best_epoch": 1,
+  "best_validation_AUROC": 0.7509796661421211,
+  "best_validation_AUPRC": 0.8679317731273474,
+  "historical_seed42_AUROC": 0.7502494163,
+  "historical_seed42_AUPRC": 0.8693882878,
+  "delta_vs_historical_AUROC": 0.0007302498421211112,
+  "delta_vs_historical_AUPRC": -0.0014565146726526201
+}

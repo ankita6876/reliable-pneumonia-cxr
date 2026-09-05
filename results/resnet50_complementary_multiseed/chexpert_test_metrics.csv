@@ -1,0 +1,2 @@
+method,dataset,n,positive,negative,AUROC,AUPRC,Brier,NLL
+complementary_resnet50_3seed_logit_mean,chexpert_test,990,706,284,0.74801500219447,0.8672512633224498,0.20915752929475023,0.6078328945442975

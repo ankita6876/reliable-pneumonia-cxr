@@ -1,0 +1,46 @@
+{
+  "method_name": "Complementary ResNet50 three-seed logit ensemble",
+  "development_dataset": "CheXpert",
+  "training_seeds": [
+    42,
+    123,
+    2026
+  ],
+  "backbone": "ResNet50",
+  "initialization": "ImageNet IMAGENET1K_V2",
+  "input": "full radiograph RGB 224x224",
+  "training_augmentation": {
+    "brightness": 0.15,
+    "contrast": 0.15,
+    "random_gamma_range": [
+      0.85,
+      1.15
+    ],
+    "random_gamma_probability": 0.5
+  },
+  "optimizer": {
+    "name": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001
+  },
+  "epochs": 5,
+  "checkpoint_selection": "maximum CheXpert validation AUROC independently per seed",
+  "ensemble": "equal-weight arithmetic mean of the three model logits",
+  "ensemble_weights": {
+    "seed42": 0.3333333333333333,
+    "seed123": 0.3333333333333333,
+    "seed2026": 0.3333333333333333
+  },
+  "frozen_before_external_evaluation": true,
+  "external_data_used_for_selection": false,
+  "chexpert_validation_AUROC": 0.776435558,
+  "chexpert_validation_AUPRC": 0.873803759,
+  "chexpert_test_AUROC": 0.74801500219447,
+  "chexpert_test_AUPRC": 0.8672512633224498,
+  "notes": [
+    "No seed weighting was optimized.",
+    "No external dataset was used for model or ensemble selection.",
+    "Large model checkpoints are intentionally excluded from GitHub.",
+    "RSNA and PadChest evaluation remains pending at this snapshot."
+  ]
+}
