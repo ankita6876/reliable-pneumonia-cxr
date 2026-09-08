@@ -1,0 +1,43 @@
+Alpha/Beta Fusion Weight Sensitivity Analysis
+==============================================
+
+Fusion:
+z_fusion = alpha * z_original + beta * z_complementary
+beta = 1 - alpha
+
+Dataset:
+CheXpert validation only, N = 979.
+
+Tested alpha:
+0.50 to 1.00, step 0.05.
+
+Historical complementary branch:
+AUROC = 0.7502494163
+AUPRC = 0.8693882878
+
+Reproduced complementary branch:
+AUROC = 0.750979666142
+AUPRC = 0.867931773127
+
+Reconstructed optimum:
+alpha = 0.60
+beta = 0.40
+AUROC = 0.765877791149
+AUPRC = 0.871462839838
+
+Historical selected pair:
+alpha = 0.65
+beta = 0.35
+
+Historical fusion result:
+AUROC = 0.771514085593508
+AUPRC = 0.8745314831521704
+
+Important:
+The original historical sweep artifact and historical
+complementary checkpoint were not preserved. This curve is
+therefore explicitly a reconstructed sensitivity analysis
+using an independently reproduced complementary seed-42
+checkpoint from the documented historical training recipe.
+
+No external labels were used.
