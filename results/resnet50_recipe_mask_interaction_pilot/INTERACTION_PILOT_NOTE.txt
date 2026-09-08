@@ -1,0 +1,45 @@
+ResNet50 recipe × masking interaction pilot
+==============================================
+
+Development dataset:
+CheXpert train/validation only.
+
+Seed:
+42.
+
+Purpose:
+Test whether the alternative full-image training recipe also improves
+segmentation-guided Hard and Soft inputs.
+
+Results (validation AUROC):
+Original recipe:
+  Full       0.756194267025
+  Hard       0.740324189800
+  Soft 0.20  0.747755253200
+
+Alternative recipe:
+  Full       0.750979666142
+  Hard       0.731478910179
+  Soft 0.20  0.751853908894
+
+Alternative minus Original:
+  Full      -0.005214600882
+  Hard      -0.008845279621
+  Soft 0.20 +0.004098655694
+
+Within alternative recipe:
+  Hard minus Full = -0.019500755963
+  Soft minus Full = +0.000874242752
+
+Interpretation:
+This single-seed development-only pilot does not support a general
+masking rescue from the alternative recipe. Hard masking remained
+associated with lower validation discrimination. Soft attenuation was
+approximately comparable to the full-image alternative model.
+
+The experiment does not identify a causal contribution from augmentation,
+initialization, learning rate, weight decay, batch size, scheduler, or any
+other individual recipe component because the alternative recipe changes
+multiple factors simultaneously.
+
+No CheXpert test, RSNA, or PadChest data were used for this pilot.
