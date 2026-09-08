@@ -1,0 +1,3 @@
+metric,original,hard_masked,difference_masked_minus_original,difference_ci_lower,difference_ci_upper,bootstrap_p_value,bootstrap_iterations,family
+auroc,0.7909839908032232,0.7488436319118729,-0.0421403588913503,-0.0480785162373266,-0.0360438402654829,0.0,2000,discrimination
+pr_auc,0.4664853458729693,0.4250037835325741,-0.0414815623403952,-0.0527878063490926,-0.0300737081281659,0.0,2000,discrimination

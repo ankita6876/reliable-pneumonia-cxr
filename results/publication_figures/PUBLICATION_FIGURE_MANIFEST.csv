@@ -1,0 +1,7 @@
+Figure,Purpose,Status,Evidence
+Figure 1,Alpha/beta sensitivity,COMPLETE,Committed reconstructed validation sweep
+Figure 2,Masking discrimination,WITHHELD,Provisional manually assembled version removed
+Figure 3,RSNA localization-discrimination trade-off,COMPLETE,Mounted DenseNet121 discrimination + Grad-CAM artifacts
+Figure 4,Cross-dataset generalization,COMPLETE,Generated directly from committed result CSVs
+Figure 5,Alternative-recipe validation seed robustness,COMPLETE,Committed validation_metrics.csv
+Figure 6,Recipe × masking interaction,COMPLETE,Generated directly from committed interaction pilot CSV

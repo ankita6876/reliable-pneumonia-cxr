@@ -1,0 +1,11 @@
+Metric family,Metric,Model,Value
+Discrimination,AUROC,Original,0.7909839908032232
+Discrimination,AUROC,Hard masked,0.7488436319118729
+Discrimination,AUPRC,Original,0.4664853458729693
+Discrimination,AUPRC,Hard masked,0.4250037835325741
+Localization,Pointing-game hit,Original,0.07168995342648038
+Localization,Pointing-game hit,Hard masked,0.4077524538346365
+Localization,Energy inside boxes,Original,0.10058249039327052
+Localization,Energy inside boxes,Hard masked,0.21685340315865756
+Localization,Heatmap IoU,Original,0.03667374341218798
+Localization,Heatmap IoU,Hard masked,0.15013793450151797
