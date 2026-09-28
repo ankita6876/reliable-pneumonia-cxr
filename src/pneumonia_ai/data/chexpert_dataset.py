@@ -48,6 +48,7 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         context_dilation_radius: int = 12,
         context_feather_radius: int = 8,
         context_background_factor: float = 0.20,
+        return_lung_probability: bool = False,
     ) -> None:
         """Load one manifest split and validate its image references.
 
@@ -149,6 +150,16 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         self.context_background_factor = context_background_factor
         self.lung_crop_padding = lung_crop_padding
         self.classifier_image_size = classifier_image_size
+        self.return_lung_probability = bool(return_lung_probability)
+
+        if (
+            self.return_lung_probability
+            and self.lung_segmenter is None
+            and self.mask_cache is None
+        ):
+            raise DatasetValidationError(
+                "return_lung_probability=True requires lung_segmenter or mask_cache."
+            )
 
     def __len__(self) -> int:
         """Return the number of rows in the requested split."""
@@ -159,8 +170,15 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         row = self.records.iloc[index]
         with Image.open(self._resolved_image_paths[index]) as opened_image:
             image = opened_image.convert("RGB")
-        if self.input_mode is not InputMode.ORIGINAL or self.classifier_image_size is not None:
+        probability_mask = None
+        if (
+            self.input_mode is not InputMode.ORIGINAL
+            or self.classifier_image_size is not None
+            or self.return_lung_probability
+        ):
             probability_mask = self._probability_mask(index, image)
+
+        if self.input_mode is not InputMode.ORIGINAL or self.classifier_image_size is not None:
             image = prepare_classifier_image(
                 image, self.input_mode, segmenter=self.lung_segmenter,
                 threshold=self.mask_threshold, crop_padding=self.lung_crop_padding,
@@ -174,7 +192,7 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             image = image.convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
-        return {
+        sample = {
             "image": image,
             "label": torch.tensor(float(self._targets.iloc[index]), dtype=torch.float32),
             "target": torch.tensor(float(self._targets.iloc[index]), dtype=torch.float32),
@@ -187,8 +205,40 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             "image_path": self._returned_image_paths[index],
         }
 
+        if self.return_lung_probability:
+            assert probability_mask is not None
+
+            # Frozen U-Net probability maps retain the source CXR dimensions,
+            # which vary across CheXpert images. Resize the continuous map to
+            # the classifier coordinate system so maps can be batched while
+            # remaining spatially aligned with the resized full radiograph.
+            lung_probability = probability_mask.to(
+                dtype=torch.float32
+            )
+
+            # FrozenLungSegmenter returns [1, H, W]. Add only the batch
+            # dimension required by interpolate: [1, 1, H, W].
+            if lung_probability.ndim == 2:
+                lung_probability = lung_probability.unsqueeze(0)
+            if lung_probability.ndim != 3 or lung_probability.shape[0] != 1:
+                raise DatasetValidationError(
+                    "Expected lung probability map with shape [1,H,W] "
+                    f"or [H,W], got {tuple(lung_probability.shape)}."
+                )
+
+            lung_probability = torch.nn.functional.interpolate(
+                lung_probability.unsqueeze(0),
+                size=(224, 224),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(0)
+
+            sample["lung_probability"] = lung_probability
+
+        return sample
+
     def _probability_mask(self, index: int, image: Image.Image) -> torch.Tensor | None:
-        if self.input_mode is InputMode.ORIGINAL:
+        if self.input_mode is InputMode.ORIGINAL and not self.return_lung_probability:
             return None
         if self.mask_cache is None:
             assert self.lung_segmenter is not None
