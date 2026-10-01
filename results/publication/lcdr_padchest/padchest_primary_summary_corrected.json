@@ -1,0 +1,60 @@
+{
+  "dataset": "PadChest",
+  "cohort_images": 95757,
+  "cohort_patients": 63706,
+  "positive_images": 3773,
+  "negative_images": 91984,
+  "prediction_file": "/kaggle/working/reliable-pneumonia-cxr/results/lcdr_vs_p7/padchest_full_corrected/padchest_lcdr_recovered_vs_p7_predictions_corrected.csv",
+  "prediction_sha256": "7672fdd57f253c0aa08f79f7767705bfbab45ddcd919997065db11ba423c0d5e",
+  "bootstrap": {
+    "type": "paired_patient_cluster",
+    "replicates": 1000,
+    "seed": 42,
+    "ci": "percentile_95"
+  },
+  "p7": {
+    "auroc": 0.681157433284356,
+    "auroc_ci95": [
+      0.6726875090893875,
+      0.6900087250893248
+    ],
+    "auprc": 0.06926995953963551,
+    "auprc_ci95": [
+      0.06545020192664201,
+      0.07364708521087512
+    ]
+  },
+  "lcdr_recovered_corrected": {
+    "auroc": 0.7498711431370749,
+    "auroc_ci95": [
+      0.7418238559220185,
+      0.7582384816311224
+    ],
+    "auprc": 0.10964172120247388,
+    "auprc_ci95": [
+      0.10345204858087749,
+      0.11737197502413245
+    ]
+  },
+  "paired_difference_lcdr_minus_p7": {
+    "auroc": 0.06871370985271896,
+    "auroc_ci95": [
+      0.061183215752980524,
+      0.07612841447738845
+    ],
+    "auprc": 0.040371761662838374,
+    "auprc_ci95": [
+      0.035513527654335464,
+      0.04599989753798164
+    ]
+  },
+  "decision": {
+    "auroc_noninferiority_margin": -0.01,
+    "auroc_noninferiority_satisfied": true,
+    "auroc_superiority_supported": true,
+    "auprc_superiority_supported": true
+  },
+  "external_labels_used_for_model_selection": false,
+  "external_labels_used_for_threshold_selection": false,
+  "external_labels_used_for_calibration_fitting": false
+}
