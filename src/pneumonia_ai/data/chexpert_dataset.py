@@ -8,6 +8,10 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset
 
+from pneumonia_ai.classification.segmentation_guided import InputMode, prepare_classifier_image
+from pneumonia_ai.segmentation.cache import MaskCache
+from pneumonia_ai.segmentation.inference import FrozenLungSegmenter
+
 
 VALID_SPLITS = frozenset({"train", "validation", "test"})
 VALID_LABELS = frozenset({1, 0, -1})
@@ -33,6 +37,18 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         manifest_path: Path | str,
         split: str,
         transform: Callable[[Image.Image], object] | None = None,
+        input_mode: InputMode | str = InputMode.ORIGINAL,
+        lung_segmenter: FrozenLungSegmenter | None = None,
+        mask_cache: MaskCache | None = None,
+        mask_threshold: float = 0.5,
+        lung_crop_padding: int = 0,
+        classifier_image_size: int | tuple[int, int] | None = None,
+        allow_absolute_image_paths: bool = False,
+        soft_mask_outside_factor: float = 0.20,
+        context_dilation_radius: int = 12,
+        context_feather_radius: int = 8,
+        context_background_factor: float = 0.20,
+        return_lung_probability: bool = False,
     ) -> None:
         """Load one manifest split and validate its image references.
 
@@ -99,7 +115,9 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         self._targets = targets.astype("float32").reset_index(drop=True)
         self._sample_loss_weights = weights.astype("float32").reset_index(drop=True)
         self._resolved_image_paths = [
-            _resolve_manifest_image_path(self.dataset_root, image_path)
+            _resolve_manifest_image_path(
+                self.dataset_root, image_path, allow_absolute=allow_absolute_image_paths
+            )
             for image_path in self.records["image_path"]
         ]
         for image_path in self._resolved_image_paths:
@@ -108,10 +126,40 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
                     f"Image file referenced by manifest does not exist: {image_path}"
                 )
         self._returned_image_paths = [
-            image_path.relative_to(self.dataset_root).as_posix()
+            _returned_image_path(image_path, self.dataset_root)
             for image_path in self._resolved_image_paths
         ]
         self.transform = transform
+        try:
+            self.input_mode = InputMode(input_mode)
+        except ValueError as error:
+            raise DatasetValidationError(
+                "input_mode must be original, hard_masked, soft_masked, "
+                "context_preserving, or lung_crop."
+            ) from error
+        if self.input_mode is not InputMode.ORIGINAL and lung_segmenter is None and mask_cache is None:
+            raise DatasetValidationError(
+                "hard_masked, soft_masked, context_preserving, and lung_crop input modes require lung_segmenter or mask_cache."
+            )
+        self.lung_segmenter = lung_segmenter
+        self.mask_cache = mask_cache
+        self.mask_threshold = mask_threshold
+        self.soft_mask_outside_factor = soft_mask_outside_factor
+        self.context_dilation_radius = context_dilation_radius
+        self.context_feather_radius = context_feather_radius
+        self.context_background_factor = context_background_factor
+        self.lung_crop_padding = lung_crop_padding
+        self.classifier_image_size = classifier_image_size
+        self.return_lung_probability = bool(return_lung_probability)
+
+        if (
+            self.return_lung_probability
+            and self.lung_segmenter is None
+            and self.mask_cache is None
+        ):
+            raise DatasetValidationError(
+                "return_lung_probability=True requires lung_segmenter or mask_cache."
+            )
 
     def __len__(self) -> int:
         """Return the number of rows in the requested split."""
@@ -122,9 +170,29 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
         row = self.records.iloc[index]
         with Image.open(self._resolved_image_paths[index]) as opened_image:
             image = opened_image.convert("RGB")
+        probability_mask = None
+        if (
+            self.input_mode is not InputMode.ORIGINAL
+            or self.classifier_image_size is not None
+            or self.return_lung_probability
+        ):
+            probability_mask = self._probability_mask(index, image)
+
+        if self.input_mode is not InputMode.ORIGINAL or self.classifier_image_size is not None:
+            image = prepare_classifier_image(
+                image, self.input_mode, segmenter=self.lung_segmenter,
+                threshold=self.mask_threshold, crop_padding=self.lung_crop_padding,
+                soft_mask_outside_factor=self.soft_mask_outside_factor,
+                context_dilation_radius=self.context_dilation_radius,
+                context_feather_radius=self.context_feather_radius,
+                context_background_factor=self.context_background_factor,
+                output_size=self.classifier_image_size, probability_mask=probability_mask,
+            )
+        if self.input_mode is not InputMode.ORIGINAL:
+            image = image.convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
-        return {
+        sample = {
             "image": image,
             "label": torch.tensor(float(self._targets.iloc[index]), dtype=torch.float32),
             "target": torch.tensor(float(self._targets.iloc[index]), dtype=torch.float32),
@@ -137,10 +205,76 @@ class CheXpertPneumoniaDataset(Dataset[dict[str, object]]):
             "image_path": self._returned_image_paths[index],
         }
 
+        if self.return_lung_probability:
+            assert probability_mask is not None
 
-def _resolve_manifest_image_path(dataset_root: Path, image_path: object) -> Path:
+            # Frozen U-Net probability maps retain the source CXR dimensions,
+            # which vary across CheXpert images. Resize the continuous map to
+            # the classifier coordinate system so maps can be batched while
+            # remaining spatially aligned with the resized full radiograph.
+            lung_probability = probability_mask.to(
+                dtype=torch.float32
+            )
+
+            # FrozenLungSegmenter returns [1, H, W]. Add only the batch
+            # dimension required by interpolate: [1, 1, H, W].
+            if lung_probability.ndim == 2:
+                lung_probability = lung_probability.unsqueeze(0)
+            if lung_probability.ndim != 3 or lung_probability.shape[0] != 1:
+                raise DatasetValidationError(
+                    "Expected lung probability map with shape [1,H,W] "
+                    f"or [H,W], got {tuple(lung_probability.shape)}."
+                )
+
+            lung_probability = torch.nn.functional.interpolate(
+                lung_probability.unsqueeze(0),
+                size=(224, 224),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(0)
+
+            sample["lung_probability"] = lung_probability
+
+        return sample
+
+    def _probability_mask(self, index: int, image: Image.Image) -> torch.Tensor | None:
+        if self.input_mode is InputMode.ORIGINAL and not self.return_lung_probability:
+            return None
+        if self.mask_cache is None:
+            assert self.lung_segmenter is not None
+            return self.lung_segmenter.predict_proba(image)
+        if self.lung_segmenter is None:
+            mask = self.mask_cache.get_for_source(self._resolved_image_paths[index])
+            if mask is None:
+                raise DatasetValidationError(
+                    "Mask cache lacks a valid mask for the requested hard-masked image."
+                )
+            return mask
+        key = self.mask_cache.key(
+            self._resolved_image_paths[index],
+            self.lung_segmenter.checkpoint_path,
+            self.mask_threshold,
+            self.lung_segmenter.image_size,
+        )
+        mask = self.mask_cache.get(key)
+        if mask is None:
+            mask = self.lung_segmenter.predict_proba(image)
+            self.mask_cache.set(key, mask, source_path=self._resolved_image_paths[index])
+        return mask
+
+
+def _resolve_manifest_image_path(
+    dataset_root: Path, image_path: object, *, allow_absolute: bool = False
+) -> Path:
     """Resolve a portable root-relative manifest path using native filesystem paths."""
-    manifest_path = PurePosixPath(str(image_path))
+    native_path = Path(str(image_path)).expanduser()
+    if native_path.is_absolute():
+        if allow_absolute:
+            return native_path.resolve()
+        raise DatasetValidationError(
+            "Manifest image_path must be a relative POSIX path: " f"{image_path!r}"
+        )
+    manifest_path = PurePosixPath(str(image_path).replace("\\", "/"))
     if (
         manifest_path.is_absolute()
         or not manifest_path.parts
@@ -150,3 +284,12 @@ def _resolve_manifest_image_path(dataset_root: Path, image_path: object) -> Path
             "Manifest image_path must be a relative POSIX path: " f"{image_path!r}"
         )
     return dataset_root.joinpath(*manifest_path.parts)
+
+
+def _returned_image_path(image_path: Path, dataset_root: Path) -> str:
+    """Keep portable paths when possible, retaining permitted absolute paths otherwise."""
+
+    try:
+        return image_path.relative_to(dataset_root).as_posix()
+    except ValueError:
+        return str(image_path)
