@@ -1,0 +1,85 @@
+{
+  "experiment": "STEP107 CXR-SDGNet frozen corrected PadChest evaluation",
+  "scientific_status": "Post-lock exploratory/secondary external evaluation; PadChest had been observed during earlier thesis experiments.",
+  "checkpoint_sha256": "afbac3f737ed2c6012ce751554dbae63099bce94980cb83ae176cc84520ab336",
+  "temperature": 1.074869297451,
+  "frozen_threshold": 0.271684169245,
+  "external_refitting": false,
+  "preprocessing": "native uint16 PNG / 65535 -> 3-channel replication -> ImageNet normalization",
+  "metrics": {
+    "N": 95757,
+    "positive": 3773,
+    "negative": 91984,
+    "prevalence": 0.039401819188153345,
+    "AUROC": 0.7136972970950086,
+    "AUPRC": 0.10083762278351269,
+    "F1_frozen": 0.10671805202767802,
+    "precision_frozen": 0.057135354141656665,
+    "sensitivity_frozen": 0.807315133845746,
+    "specificity_frozen": 0.4535353974604279,
+    "balanced_accuracy_frozen": 0.630425265653087,
+    "Brier_calibrated": 0.133864640476949,
+    "NLL_calibrated": 0.44054679458917434,
+    "ECE15_calibrated": 0.28708500175538,
+    "TP": 3046,
+    "FP": 50266,
+    "TN": 41718,
+    "FN": 727,
+    "mean_raw_probability": 0.316620550599128,
+    "mean_calibrated_probability": 0.3264868209435333,
+    "predicted_positive_rate": 0.5567425880092317,
+    "oracle_max_F1_DIAGNOSTIC_ONLY": 0.1778019755775064,
+    "oracle_threshold_DIAGNOSTIC_ONLY": 0.5545461115709366
+  },
+  "comparators": {
+    "P7_corrected": {
+      "AUROC": 0.681157,
+      "AUPRC": 0.06927
+    },
+    "LCDR_v1_corrected": {
+      "AUROC": 0.749871,
+      "AUPRC": 0.109642,
+      "F1_frozen": 0.118466,
+      "sensitivity": 0.831964,
+      "specificity": 0.499022,
+      "precision": 0.063774
+    },
+    "CPRE_corrected": {
+      "AUROC": 0.736943,
+      "AUPRC": 0.099675,
+      "F1_frozen": 0.12988,
+      "precision": 0.070847,
+      "sensitivity": 0.778956,
+      "specificity": 0.58096,
+      "balanced_accuracy": 0.679958,
+      "Brier": 0.118413,
+      "NLL": 0.399808,
+      "ECE15": 0.257253
+    }
+  },
+  "comparison": {
+    "delta_AUROC_vs_P7": 0.03254029709500861,
+    "delta_AUPRC_vs_P7": 0.03156762278351269,
+    "delta_AUROC_vs_LCDR": -0.036173702904991334,
+    "delta_AUPRC_vs_LCDR": -0.008804377216487316,
+    "delta_AUROC_vs_CPRE": -0.023245702904991394,
+    "delta_AUPRC_vs_CPRE": 0.0011626227835126873
+  },
+  "cohort_audit": {
+    "manifest": "/kaggle/input/datasets/ankitaroy123567/padchest-phase2-keep-backup/PADCHEST_PHASE2_KEEP/padchest_pa_ap_manifest.csv",
+    "image_root": "/kaggle/input/datasets/seoyunje/padchest-small-dataset/PC/images-224/images-224",
+    "N": 95757,
+    "positive": 3773,
+    "negative": 91984,
+    "prevalence": 0.039401819188153345,
+    "unique_patients": 63706,
+    "projection_counts": {
+      "PA": 91250,
+      "AP": 4507
+    },
+    "images_found": 95757,
+    "images_missing": 0,
+    "preprocessing": "Native PadChest uint16 PNG -> divide by 65535 -> RGB channel replication -> ImageNet normalization",
+    "external_refitting": false
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "manifest": "/kaggle/input/datasets/ankitaroy123567/padchest-phase2-keep-backup/PADCHEST_PHASE2_KEEP/padchest_pa_ap_manifest.csv",
+  "image_root": "/kaggle/input/datasets/seoyunje/padchest-small-dataset/PC/images-224/images-224",
+  "N": 95757,
+  "positive": 3773,
+  "negative": 91984,
+  "prevalence": 0.039401819188153345,
+  "unique_patients": 63706,
+  "projection_counts": {
+    "PA": 91250,
+    "AP": 4507
+  },
+  "images_found": 95757,
+  "images_missing": 0,
+  "preprocessing": "Native PadChest uint16 PNG -> divide by 65535 -> RGB channel replication -> ImageNet normalization",
+  "external_refitting": false
+}

@@ -50,5 +50,30 @@
     "external_temperature_refit": false,
     "external_threshold_refit": false,
     "rsna_status": "post-lock exploratory/secondary"
+  },
+  "padchest_frozen_evaluation": {
+    "step": 107,
+    "N": 95757,
+    "positive": 3773,
+    "negative": 91984,
+    "prevalence": 0.039402,
+    "AUROC": 0.713697,
+    "AUPRC": 0.100838,
+    "F1_frozen": 0.106718,
+    "precision_frozen": 0.057135,
+    "sensitivity_frozen": 0.807315,
+    "specificity_frozen": 0.453535,
+    "balanced_accuracy_frozen": 0.630425,
+    "Brier": 0.133865,
+    "NLL": 0.440547,
+    "ECE15": 0.287085,
+    "oracle_max_F1_diagnostic_only": 0.177802,
+    "oracle_threshold_diagnostic_only": 0.554546,
+    "checkpoint_sha256": "afbac3f737ed2c6012ce751554dbae63099bce94980cb83ae176cc84520ab336",
+    "prediction_sha256": "240b59b6875b35a58d8d4d4a04b7bd1dd19b579d1ee5cba0604c99d0ffc5ad87",
+    "result_sha256": "3424d512bf528e27be8c0b3163543af295c0f858d3b9f92df2377637792a124d",
+    "cohort_audit_sha256": "7db9b4ec93a412a2c4263581fc655dbfef95a19830f403a4ffeeb89809a6ff0e",
+    "external_refitting": false,
+    "architecture_search_closed": true
   }
 }
