@@ -1,0 +1,13 @@
+{
+  "constructed_N": 26684,
+  "constructed_positive": 6012,
+  "constructed_negative": 20672,
+  "constructed_prevalence": 0.225303552690751,
+  "label_csv": "/kaggle/input/datasets/parin30/rsna-pneumonia-detection/drive-download-20240112T131344Z-002/stage_2_train_labels.csv",
+  "image_dir": "/kaggle/input/datasets/parin30/rsna-pneumonia-detection/drive-download-20240112T131344Z-002/stage_2_train_images",
+  "lcdr_reference_rows": 26684,
+  "reference_id_column": "patient_id",
+  "id_intersection": 26684,
+  "constructed_only": 0,
+  "reference_only": 0
+}

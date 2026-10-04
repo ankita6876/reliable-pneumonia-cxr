@@ -1,0 +1,54 @@
+{
+  "model": "CXR-SDGNet",
+  "full_name": "Content-Preserving Style-Robust Domain Generalization Network",
+  "architecture_status": "FROZEN",
+  "architecture_search": "CLOSED",
+  "checkpoint": {
+    "filename": "best_cxr_sdgnet_seed42.pt",
+    "sha256": "afbac3f737ed2c6012ce751554dbae63099bce94980cb83ae176cc84520ab336",
+    "committed_to_git": false,
+    "reason": "Large checkpoint excluded from normal Git history."
+  },
+  "source_chexpert": {
+    "selected_epoch": 7,
+    "AUROC": 0.779066,
+    "AUPRC": 0.880808,
+    "F1": 0.853786,
+    "temperature": 1.074869297451,
+    "frozen_threshold": 0.271684169245
+  },
+  "rsna": {
+    "N": 26684,
+    "positive": 6012,
+    "negative": 20672,
+    "prevalence": 0.225304,
+    "AUROC": 0.793389,
+    "AUPRC": 0.483539,
+    "F1_frozen": 0.429233,
+    "precision": 0.274845,
+    "sensitivity": 0.979375,
+    "specificity": 0.2485,
+    "balanced_accuracy": 0.613937,
+    "Brier": 0.203043,
+    "NLL": 0.593823,
+    "ECE15": 0.2452,
+    "oracle_F1_diagnostic_only": 0.5449,
+    "oracle_threshold_diagnostic_only": 0.525443
+  },
+  "rsna_comparison": {
+    "P7_AUROC": 0.734408,
+    "LCDR_AUROC": 0.799367,
+    "CPRE_AUROC": 0.817505,
+    "CXR_SDGNet_AUROC": 0.793389,
+    "delta_vs_P7": 0.058981,
+    "delta_vs_LCDR": -0.005978,
+    "delta_vs_CPRE": -0.024116
+  },
+  "protocol": {
+    "external_architecture_tuning": false,
+    "external_checkpoint_selection": false,
+    "external_temperature_refit": false,
+    "external_threshold_refit": false,
+    "rsna_status": "post-lock exploratory/secondary"
+  }
+}

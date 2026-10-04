@@ -1,0 +1,117 @@
+{
+  "model_name": "CXR-SDGNet",
+  "status": "FROZEN BEFORE EXTERNAL EVALUATION",
+  "checkpoint": "/kaggle/working/STEP104_CXR_SDGNET/best_cxr_sdgnet_seed42.pt",
+  "checkpoint_sha256": "afbac3f737ed2c6012ce751554dbae63099bce94980cb83ae176cc84520ab336",
+  "source_selected_epoch": 7,
+  "training_dataset": "CheXpert",
+  "source_train_n": 4581,
+  "source_validation_n": 979,
+  "source_positive_n": 702,
+  "source_negative_n": 277,
+  "architecture": {
+    "backbone": "DenseNet121",
+    "pretraining": "ImageNet",
+    "input": "full CXR",
+    "input_size": 224,
+    "feature_style_intervention": "after DenseBlock1",
+    "style_randomization": "bounded feature-statistic randomization",
+    "mu_bound": 0.2,
+    "log_sigma_bound": 0.2,
+    "confidence_gated_consistency": true,
+    "consistency_lambda": 0.1,
+    "confidence_gate": "2*abs(p_clean-0.5), detached",
+    "SAM": true,
+    "SAM_rho": 0.05,
+    "inference": "single ordinary clean forward pass"
+  },
+  "optimization": {
+    "backbone_lr": 1e-05,
+    "classifier_lr": 0.0001,
+    "weight_decay": 1e-05,
+    "weighted_BCE_pos_weight": 0.4022038567493113,
+    "max_epochs": 8,
+    "batch_size": 16,
+    "seed": 42
+  },
+  "source_selection": {
+    "checkpoint_metric": "CheXpert validation AUROC",
+    "external_data_used": false,
+    "synthetic_style_used_for_checkpoint_selection": false
+  },
+  "source_raw_metrics": {
+    "AUROC": 0.7790660001851337,
+    "AUPRC": 0.8808076131604772,
+    "F1": 0.8537859007832899,
+    "precision": 0.7879518072289157,
+    "sensitivity": 0.9316239316239316,
+    "specificity": 0.36462093862815886,
+    "balanced_accuracy": 0.6481224351260453,
+    "TP": 654,
+    "FP": 176,
+    "TN": 101,
+    "FN": 48,
+    "Brier": 0.1838410257840333,
+    "NLL": 0.5506544807881066
+  },
+  "source_calibration": {
+    "method": "temperature scaling",
+    "temperature": 1.0748692974511407,
+    "fit_dataset": "CheXpert validation only",
+    "external_refitting_allowed": false
+  },
+  "source_operating_point": {
+    "selection": "maximum F1 on calibrated CheXpert validation predictions",
+    "frozen_calibrated_threshold": 0.2716841692449374,
+    "source_calibrated_metrics": {
+      "AUROC": 0.7790660001851337,
+      "AUPRC": 0.8808076131604772,
+      "F1": 0.8537859007832899,
+      "precision": 0.7879518072289157,
+      "sensitivity": 0.9316239316239316,
+      "specificity": 0.36462093862815886,
+      "balanced_accuracy": 0.6481224351260453,
+      "TP": 654,
+      "FP": 176,
+      "TN": 101,
+      "FN": 48,
+      "Brier": 0.1838850576072334,
+      "NLL": 0.550100448897888
+    }
+  },
+  "external_evaluation_rules": {
+    "datasets": [
+      "RSNA Pneumonia Detection Challenge",
+      "PadChest"
+    ],
+    "checkpoint_change_allowed": false,
+    "architecture_change_allowed": false,
+    "temperature_refit_allowed": false,
+    "threshold_refit_allowed": false,
+    "external_label_tuning_allowed": false,
+    "primary_discrimination_metrics": [
+      "AUROC",
+      "AUPRC"
+    ],
+    "frozen_operating_metrics": [
+      "F1",
+      "precision",
+      "sensitivity",
+      "specificity",
+      "balanced_accuracy"
+    ],
+    "calibration_metrics": [
+      "Brier",
+      "NLL",
+      "ECE"
+    ],
+    "statistical_analysis": "patient-cluster bootstrap where patient identifiers are available",
+    "bootstrap_repetitions": 2000,
+    "external_oracle_threshold": "diagnostic only; never primary result"
+  },
+  "scientific_status": {
+    "CPRE": "previously locked primary reliability framework",
+    "CXR_SDGNet": "post-CPRE architecture-development result",
+    "external_interpretation": "RSNA and PadChest have been observed during earlier thesis experiments; therefore CXR-SDGNet external evaluation is post-lock exploratory/secondary rather than untouched confirmatory validation."
+  }
+}
