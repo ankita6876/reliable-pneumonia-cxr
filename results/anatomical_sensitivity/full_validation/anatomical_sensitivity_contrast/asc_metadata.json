@@ -1,0 +1,11 @@
+{
+  "dataset": "CheXpert",
+  "cohort": "979 images, 831 patients",
+  "metric": "0.5 * (interior + boundary) - exterior",
+  "aggregation": "patch to image to patient, then cohort mean",
+  "bootstrap_unit": "patient",
+  "bootstrap_repetitions": 5000,
+  "status": "exploratory source-domain reference",
+  "novelty_claim": false,
+  "external_threshold_selected": false
+}

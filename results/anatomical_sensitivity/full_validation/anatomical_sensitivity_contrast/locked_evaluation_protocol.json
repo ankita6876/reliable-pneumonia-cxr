@@ -1,0 +1,37 @@
+{
+  "study": "Anatomical prediction sensitivity under dataset shift",
+  "development_dataset": "CheXpert",
+  "external_datasets": [
+    "RSNA",
+    "PadChest"
+  ],
+  "source_images": 979,
+  "source_patients": 831,
+  "classifier": "Frozen ResNet50",
+  "segmenter": "Frozen U-Net",
+  "input_size": [
+    224,
+    224
+  ],
+  "patch_size": [
+    8,
+    8
+  ],
+  "patches_per_region": 10,
+  "regions": [
+    "interior",
+    "boundary",
+    "exterior"
+  ],
+  "perturbations": {
+    "blackout": "black pixel replacement",
+    "blur": "Gaussian blur, radius 5"
+  },
+  "primary_measure": "Mean absolute prediction probability change",
+  "asc_definition": "0.5 * (interior sensitivity + boundary sensitivity) - exterior sensitivity",
+  "aggregation": "patch -> image -> patient -> dataset",
+  "uncertainty": "patient-cluster bootstrap when patient IDs exist",
+  "bootstrap_repetitions": 5000,
+  "external_policy": "No external labels used for architecture, threshold, perturbation, or protocol selection",
+  "interpretation": "ASC measures relative anatomical perturbation sensitivity; it does not establish clinically correct localization"
+}
