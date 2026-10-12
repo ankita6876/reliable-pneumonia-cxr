@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "device": "cpu",
+  "image_shape": [
+    4,
+    3,
+    224,
+    224
+  ],
+  "patch_size": 8,
+  "patches_per_image": 2,
+  "boundary_radius": 12,
+  "selected_pixels": 512,
+  "consistency_loss": 3.4997604814179795e-10,
+  "note": "Synthetic unit test; not a clinical result"
+}
