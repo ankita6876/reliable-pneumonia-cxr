@@ -1,0 +1,21 @@
+{
+  "sample_count": 6,
+  "positive_count": 4,
+  "negative_count": 2,
+  "mean_absolute_probability_change": 0.025664571672677994,
+  "median_absolute_probability_change": 0.015768304467201233,
+  "maximum_absolute_probability_change": 0.055413246154785156,
+  "classification_loss": 0.2085084170103073,
+  "consistency_loss": 0.0010122827952727675,
+  "classification_gradient_norm": 20.90318489074707,
+  "consistency_gradient_norm": 5.255308628082275,
+  "gradient_norm_ratio": 0.25141186166365354,
+  "selected_pixel_count": 768,
+  "effective_gradient_ratio_by_lambda": {
+    "0.1": 0.025141186166365355,
+    "1.0": 0.25141186166365354,
+    "10.0": 2.5141186166365355,
+    "100.0": 25.141186166365355
+  },
+  "note": "Frozen ResNet50, CheXpert training-only diagnostic. Uncertain labels excluded; no weight updates."
+}
