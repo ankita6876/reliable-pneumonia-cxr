@@ -1,0 +1,18 @@
+{
+  "experiment": "matched_perturbation_strength",
+  "dataset": "CheXpert validation",
+  "matching_unit": "within-image patch pairs",
+  "caliper": 0.02,
+  "matching": "one-to-one without replacement",
+  "matching_objective": "maximize valid pairs, then minimize pixel difference",
+  "aggregation": "matched pairs -> image mean -> patient mean",
+  "bootstrap_unit": "matched patient",
+  "bootstrap_repetitions": 2000,
+  "exploratory": true,
+  "limitations": [
+    "Matching conditions on observed pixel intensity change only",
+    "Unmatched patients may differ systematically",
+    "Spatial content and texture remain uncontrolled",
+    "Matched-patient inference applies to the matched subset"
+  ]
+}
