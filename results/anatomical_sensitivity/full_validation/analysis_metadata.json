@@ -1,0 +1,23 @@
+{
+  "dataset": "CheXpert validation",
+  "images": 979,
+  "unique_patients": 831,
+  "patch_predictions": 58740,
+  "patch_size": 8,
+  "patches_per_region": 10,
+  "perturbations": [
+    "blackout",
+    "blur"
+  ],
+  "regions": [
+    "interior",
+    "boundary",
+    "exterior"
+  ],
+  "bootstrap_unit": "patient",
+  "bootstrap_repetitions": 2000,
+  "bootstrap_seed": 2026,
+  "primary_estimand": "Equal-patient-weighted mean of within-image mean absolute probability changes",
+  "analysis_status": "expanded exploratory validation",
+  "note": "Full cohort overlaps the pilot. Bootstrap intervals describe sampling variability, not independent confirmation or causal anatomical reliance."
+}
