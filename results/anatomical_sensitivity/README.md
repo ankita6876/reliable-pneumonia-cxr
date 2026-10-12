@@ -1,29 +1,58 @@
 # Anatomical Region Sensitivity Experiments
 
-MSc thesis: pneumonia classification reliability under dataset shift.
+## MSc Thesis
+Reliability of pneumonia classification from chest X-rays
+under cross-dataset shift.
 
-## Experiments
-- Initial lung-boundary perturbation pilot
-- Repeated spatial-patch sensitivity pilot
-- Blackout versus Gaussian-blur control
-- Full CheXpert validation analysis
+## Datasets
+- CheXpert: development and internal validation
+- RSNA: external evaluation
+- PadChest: external evaluation
+- JSRT: lung segmentation development
 
-## Protocol
+## Experimental Models
 - Frozen ResNet50 pneumonia classifier
 - Frozen U-Net lung segmenter
-- Lung interior, inner boundary, and exterior regions
-- 8 x 8 pixel patches
-- 10 sampled patches per region
-- Blackout and Gaussian-blur perturbations
 
-## Interpretation
-These experiments investigate prediction sensitivity under
-localized interventions. They do not establish causal anatomical
-reliance or eliminate shortcut-learning explanations.
+## Experiments
+1. Initial anatomical boundary perturbation pilot
+2. Matched-area perturbation controls
+3. Repeated spatial-patch sensitivity experiment
+4. Blackout versus Gaussian blur comparison
+5. Full CheXpert validation sensitivity analysis
 
-## Storage
-Compact tables, figures, metadata, and compressed prediction
-files are retained here. Datasets and model checkpoints are excluded.
+## Patch Protocol
+- Input size: 224 x 224
+- Patch size: 8 x 8
+- Regions: lung interior, inner boundary, exterior
+- 10 patch placements per region
+- Blackout and Gaussian blur
+- Frozen models; no additional training
 
-## Reproducibility
-Refer to the experiment metadata and the repository's source code.
+## Statistical Analysis
+- Within-image repeated patch aggregation
+- Paired anatomical region comparisons
+- Bootstrap confidence intervals
+- Patient-aware analysis where applicable
+
+## Important Interpretation
+The experiments measure prediction sensitivity under
+localized image perturbations.
+
+They do not establish causal anatomical reliance,
+prove clinical correctness, or eliminate shortcut
+learning explanations.
+
+## Storage Policy
+Store:
+- Publication-ready figures
+- Statistical tables
+- Experiment metadata
+- Compact or compressed predictions
+- Experiment reports
+
+Do not store:
+- Raw datasets
+- Large lung-mask caches
+- Model checkpoints
+- Temporary inference files
