@@ -1,0 +1,3 @@
+model,n,mean_abs_matching_vs_clean,mean_abs_reversed_vs_clean,mean_abs_matching_vs_reversed,fraction_decision_flips_matching_vs_reversed
+clean_trained,979,0.008072412712642195,0.008916456994350402,0.008991871398242915,0.012257405515832482
+shortcut_trained,979,0.007682410526385224,0.00819927216550303,0.008441803381379705,0.009193054136874362

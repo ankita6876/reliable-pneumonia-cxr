@@ -1,0 +1,3 @@
+model,mean_abs_matching_reversed,mean_signed_matching_reversed,decision_flip_rate
+clean_trained,0.012007347288121972,-0.00013642072434079538,0.009193054136874362
+strong_shortcut_trained,0.032321517897029695,0.015199521489905629,0.05107252298263534

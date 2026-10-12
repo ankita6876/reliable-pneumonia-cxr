@@ -1,0 +1,24 @@
+{
+  "research_question": "How does anatomical shortcut location affect shortcut acquisition and failure under bias reversal?",
+  "training_dataset": "CheXpert only",
+  "development_dataset": "CheXpert validation",
+  "external_sets": "RSNA and PadChest, final evaluation only",
+  "regions": [
+    "interior",
+    "boundary",
+    "exterior"
+  ],
+  "training_marker_label_correlation": 0.9,
+  "marker_size": 12,
+  "positive_marker": 230,
+  "negative_marker": 25,
+  "evaluation_conditions": [
+    "clean",
+    "matching",
+    "reversed"
+  ],
+  "annotation_type": "anatomical lung segmentation",
+  "disease_lesion_annotations": false,
+  "primary_measure": "Paired change in classification performance between matching and reversed conditions",
+  "novelty_status": "Not yet verified"
+}
