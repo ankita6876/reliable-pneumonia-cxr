@@ -1,0 +1,314 @@
+{
+  "created_utc": "2026-10-12T08:09:37.630648+00:00",
+  "purpose": "BPEC implementation feasibility",
+  "candidate_method": "Boundary-Preserving Exterior Consistency",
+  "status": "Untrained hypothesis; novelty unverified",
+  "asset_status": {
+    "resnet50_seed42": {
+      "path": "/kaggle/input/datasets/ankitaroy123567/resnet50-original42-final-do-not-delete/best_checkpoint.pt",
+      "exists": true
+    },
+    "lung_unet": {
+      "path": "/kaggle/input/datasets/ankitaroy123567/pneumonia-thesis-assets/best_checkpoint.pt",
+      "exists": true
+    },
+    "chexpert_manifest": {
+      "path": "/kaggle/input/datasets/ankitaroy123567/pneumonia-thesis-assets/chexpert_splits.csv",
+      "exists": true
+    }
+  },
+  "code_matches": [
+    {
+      "path": "src/pneumonia_ai/explainability/core.py",
+      "matching_terms": [
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/classification/__init__.py",
+      "matching_terms": [
+        "segment"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/classification/segmentation_guided.py",
+      "matching_terms": [
+        "segment",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/training/seed.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/training/__init__.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/training/experiment.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/training/engine.py",
+      "matching_terms": [
+        "train",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/segmentation/inference.py",
+      "matching_terms": [
+        "train",
+        "segment",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/segmentation/__init__.py",
+      "matching_terms": [
+        "segment",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/segmentation/model.py",
+      "matching_terms": [
+        "segment"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/segmentation/cache.py",
+      "matching_terms": [
+        "train",
+        "segment",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/evaluation/core.py",
+      "matching_terms": [
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/reporting/registry.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/models/factory.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/models/densenet.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/models/lcdr.py",
+      "matching_terms": [
+        "gradient_reverse",
+        "lcdr",
+        "train",
+        "mask",
+        "resnet"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/data/chexpert_dataset.py",
+      "matching_terms": [
+        "train",
+        "segment",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/data/chexpert_cohort.py",
+      "matching_terms": [
+        "train",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/data/splitting.py",
+      "matching_terms": [
+        "train",
+        "mask"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/data/multidataset.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/data/chexpert_metadata.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "src/pneumonia_ai/data/label_strategy.py",
+      "matching_terms": [
+        "train",
+        "mask"
+      ]
+    },
+    {
+      "path": "configs/convnext_u_zero.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/resnet50_complementary_fusion.json",
+      "matching_terms": [
+        "resnet"
+      ]
+    },
+    {
+      "path": "configs/convnext_soft_uncertain.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/convnext_u_one.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/xrv_densenet121_soft_uncertain_seed1337.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/convnext_tiny.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/baseline_densenet121.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/xrv_densenet121_soft_uncertain_seed2025.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/convnext_ignore.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/xrv_densenet121_ignore.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "configs/efficientnetv2_s.yaml",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/train_baseline.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/paired_bootstrap_fusion.py",
+      "matching_terms": [
+        "resnet"
+      ]
+    },
+    {
+      "path": "scripts/validate_chexpert_metadata.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/predict_ensemble.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/smoke_test_dataset.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/predict_multidataset.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/predict_external.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/predict.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/generate_explanations.py",
+      "matching_terms": [
+        "train"
+      ]
+    },
+    {
+      "path": "scripts/evaluate_complementary_fusion.py",
+      "matching_terms": [
+        "train",
+        "resnet"
+      ]
+    },
+    {
+      "path": "scripts/classification/train_lcdr.py",
+      "matching_terms": [
+        "lcdr",
+        "train",
+        "segment",
+        "mask",
+        "resnet"
+      ]
+    },
+    {
+      "path": "scripts/analysis/make_lcdr_padchest_publication_artifacts.py",
+      "matching_terms": [
+        "lcdr"
+      ]
+    }
+  ],
+  "next_gate": "Review existing training and segmentation interfaces before implementing the pilot"
+}
