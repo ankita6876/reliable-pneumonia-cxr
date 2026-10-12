@@ -1,0 +1,318 @@
+{
+  "seed": 42,
+  "n_images": 64,
+  "threshold": 0.2528664469718933,
+  "control_design": "equal_pixel_count_random_location",
+  "skipped_controls": [
+    {
+      "dataset_index": 58,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 81,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 106,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 153,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 176,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 177,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 214,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 251,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 279,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 333,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 432,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 486,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 564,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 584,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 594,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 650,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 700,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 800,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 806,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 835,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 853,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 873,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 892,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 910,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 917,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1013,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1087,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1202,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1226,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1236,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1324,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1357,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1489,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1518,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1541,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1553,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1582,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1585,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1623,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1635,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1668,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1719,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1746,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1756,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1764,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1795,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 1913,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2286,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2410,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2424,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2436,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2462,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2591,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2813,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2837,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2893,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2918,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 2938,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 3105,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 3141,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 3264,
+      "radius": 6,
+      "region": "interior"
+    },
+    {
+      "dataset_index": 3310,
+      "radius": 6,
+      "region": "interior"
+    }
+  ]
+}

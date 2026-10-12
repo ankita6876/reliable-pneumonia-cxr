@@ -1,0 +1,11 @@
+{
+  "patch_size": 8,
+  "n_images": 64,
+  "seed": 42,
+  "regions": {
+    "interior": "eroded lung mask",
+    "boundary": "inside-lung boundary band",
+    "exterior": "outside dilated lung mask"
+  },
+  "skipped": []
+}

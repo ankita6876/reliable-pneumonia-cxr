@@ -1,0 +1,6 @@
+{
+  "n_images": 64,
+  "n_patients": 64,
+  "patients_with_multiple_images": 0,
+  "max_images_per_patient": 1
+}

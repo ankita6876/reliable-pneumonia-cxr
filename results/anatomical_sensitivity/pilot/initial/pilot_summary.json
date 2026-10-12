@@ -1,0 +1,29 @@
+{
+  "n_images": 64,
+  "eligible_validation_images": 979,
+  "decision_threshold": 0.2528664469718933,
+  "seed": 42,
+  "reference": "hard_mask",
+  "conditions": {
+    "erode_3": {
+      "mean_absolute_probability_change": 0.03426538244821131,
+      "median_absolute_probability_change": 0.029165342450141907,
+      "prediction_flip_rate": 0.046875
+    },
+    "dilate_3": {
+      "mean_absolute_probability_change": 0.03446437092497945,
+      "median_absolute_probability_change": 0.031070537865161896,
+      "prediction_flip_rate": 0.078125
+    },
+    "erode_6": {
+      "mean_absolute_probability_change": 0.07330919220112264,
+      "median_absolute_probability_change": 0.07227969169616699,
+      "prediction_flip_rate": 0.046875
+    },
+    "dilate_6": {
+      "mean_absolute_probability_change": 0.04613521043211222,
+      "median_absolute_probability_change": 0.03725593537092209,
+      "prediction_flip_rate": 0.125
+    }
+  }
+}
