@@ -1,0 +1,20 @@
+{
+  "created_utc": "2026-10-13T14:20:56.072806+00:00",
+  "repository": "/kaggle/working/reliable-pneumonia-cxr",
+  "total_discovered_figures_and_pdfs": 74,
+  "unique_figures_and_pdfs": 68,
+  "copied_unique_figures": 68,
+  "skipped_figures": 0,
+  "historical_result_tables": 355,
+  "category_counts": {
+    "External validation / dataset shift": 8,
+    "Other thesis artifacts": 32,
+    "Anatomical shortcut experiments": 14,
+    "Final shortcut analysis": 12,
+    "Localization experiments": 2,
+    "Dataset and cohort analysis": 2,
+    "Baseline and masking experiments": 4
+  },
+  "classification_method": "Heuristic path-based classification; requires manual scientific review.",
+  "warning": "Presence of an artifact does not establish scientific validity or final-experiment status."
+}

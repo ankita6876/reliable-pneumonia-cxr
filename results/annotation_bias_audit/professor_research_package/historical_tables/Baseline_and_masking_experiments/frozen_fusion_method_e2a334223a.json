@@ -1,0 +1,28 @@
+{
+  "method_name": "ResNet50 complementary logit fusion",
+  "primary_branch": "ResNet50 Original seed42",
+  "complementary_branch": "ResNet50 style-augmentation pilot seed42",
+  "fusion_type": "weighted logit fusion",
+  "original_weight": 0.65,
+  "complementary_weight": 0.35,
+  "fusion_weight_selection": "Selected on CheXpert source validation only; frozen before CheXpert test, RSNA, and PadChest evaluation.",
+  "source_validation_original_auroc": 0.756194267024592,
+  "source_validation_fusion_auroc": 0.771514085593508,
+  "operating_threshold": 0.5414520502090454,
+  "threshold_source": "CheXpert validation; lowest threshold achieving at least 0.80 specificity for Original42.",
+  "external_tuning": false,
+  "evaluation_sets": [
+    "CheXpert test",
+    "RSNA external",
+    "PadChest full",
+    "PadChest Physician-only"
+  ],
+  "notes": [
+    "No CheXpert test labels used for fusion selection.",
+    "No RSNA labels used for fusion selection or tuning.",
+    "No PadChest labels used for fusion selection or tuning.",
+    "The complementary branch alone is diagnostic and was not selected on external datasets.",
+    "Primary reported method remains the frozen 65/35 fusion."
+  ],
+  "created_utc": "2026-09-05T10:15:51.727481+00:00"
+}

@@ -1,0 +1,13 @@
+{
+  "experiment": "blackout_vs_blur",
+  "n_images": 64,
+  "n_patch_locations": 1920,
+  "patch_size": 8,
+  "gaussian_blur_radius": 5,
+  "seed": 2026,
+  "bootstrap_repetitions": 2000,
+  "bootstrap_unit": "patient/image",
+  "same_coordinates_for_both_methods": true,
+  "no_retraining": true,
+  "exploratory": true
+}

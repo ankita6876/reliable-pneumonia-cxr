@@ -1,0 +1,74 @@
+{
+  "experiment": "STEP106 CXR-SDGNet frozen RSNA evaluation",
+  "scientific_status": "Post-lock exploratory/secondary external evaluation; RSNA had been observed in earlier thesis experiments.",
+  "checkpoint_sha256": "afbac3f737ed2c6012ce751554dbae63099bce94980cb83ae176cc84520ab336",
+  "temperature": 1.074869297451,
+  "frozen_threshold": 0.271684169245,
+  "external_refitting": false,
+  "metrics": {
+    "N": 26684,
+    "positive": 6012,
+    "negative": 20672,
+    "prevalence": 0.225303552690751,
+    "AUROC": 0.7933886041449094,
+    "AUPRC": 0.4835389074446195,
+    "F1_frozen": 0.4292327319117915,
+    "precision_frozen": 0.274844792979508,
+    "sensitivity_frozen": 0.9793745841650033,
+    "specificity_frozen": 0.24850038699690402,
+    "balanced_accuracy_frozen": 0.6139374855809536,
+    "Brier_calibrated": 0.20304266091264225,
+    "NLL_calibrated": 0.5938232751032799,
+    "ECE15_calibrated": 0.24520013097213175,
+    "TP": 5888,
+    "FP": 15535,
+    "TN": 5137,
+    "FN": 124,
+    "oracle_max_F1_DIAGNOSTIC_ONLY": 0.5449001554466101,
+    "oracle_threshold_DIAGNOSTIC_ONLY": 0.5254425519805048
+  },
+  "comparators": {
+    "P7_corrected": {
+      "AUROC": 0.734408,
+      "AUPRC": 0.35298
+    },
+    "LCDR_v1_corrected": {
+      "AUROC": 0.799367,
+      "AUPRC": 0.464042,
+      "F1_frozen": 0.451286
+    },
+    "CPRE_locked": {
+      "AUROC": 0.817505,
+      "AUPRC": 0.514256,
+      "F1_frozen": 0.459067,
+      "precision": 0.300282,
+      "sensitivity": 0.974218,
+      "specificity": 0.339783,
+      "balanced_accuracy": 0.657001,
+      "Brier": 0.191052,
+      "NLL": 0.563887,
+      "ECE": 0.230905
+    }
+  },
+  "comparison": {
+    "delta_AUROC_vs_P7": 0.058980604144909465,
+    "delta_AUPRC_vs_P7": 0.1305589074446195,
+    "delta_AUROC_vs_LCDR": -0.005978395855090635,
+    "delta_AUPRC_vs_LCDR": 0.019496907444619516,
+    "delta_AUROC_vs_CPRE": -0.024116395855090622,
+    "delta_AUPRC_vs_CPRE": -0.03071709255538052
+  },
+  "cohort_audit": {
+    "constructed_N": 26684,
+    "constructed_positive": 6012,
+    "constructed_negative": 20672,
+    "constructed_prevalence": 0.225303552690751,
+    "label_csv": "/kaggle/input/datasets/parin30/rsna-pneumonia-detection/drive-download-20240112T131344Z-002/stage_2_train_labels.csv",
+    "image_dir": "/kaggle/input/datasets/parin30/rsna-pneumonia-detection/drive-download-20240112T131344Z-002/stage_2_train_images",
+    "lcdr_reference_rows": 26684,
+    "reference_id_column": "patient_id",
+    "id_intersection": 26684,
+    "constructed_only": 0,
+    "reference_only": 0
+  }
+}

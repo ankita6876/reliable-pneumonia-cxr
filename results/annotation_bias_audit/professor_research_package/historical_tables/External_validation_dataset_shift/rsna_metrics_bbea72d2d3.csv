@@ -1,0 +1,2 @@
+method,dataset,n,positive,negative,AUROC,AUPRC,Brier,NLL,ensemble_rule,external_tuning
+complementary_resnet50_3seed_logit_mean,RSNA,26684,6012,20672,0.8293221992547413,0.540542050861252,0.15675990121177444,0.48184622545116307,equal_weight_logit_mean,False

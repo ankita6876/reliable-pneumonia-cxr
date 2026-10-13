@@ -1,0 +1,17 @@
+{
+  "finding": "Equal arithmetic mean of the currently mounted PadChest original seed42/123/2026 prediction files does not reproduce the locked corrected CPRE result.",
+  "locked_corrected_CPRE": {
+    "AUROC": 0.736943,
+    "AUPRC": 0.099675
+  },
+  "current_equal_probability_ensemble": {
+    "AUROC": 0.7486056529403908,
+    "AUPRC": 0.10620645900039849
+  },
+  "difference": {
+    "AUROC": 0.011662652940390816,
+    "AUPRC": 0.00653145900039849
+  },
+  "decision": "Do not identify the reconstructed ensemble as CPRE. Exclude it from primary CPRE inference. Retain only as an exploratory comparator.",
+  "external_model_tuning_performed": false
+}

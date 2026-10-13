@@ -1,0 +1,26 @@
+{
+  "created_utc": "2026-10-13T14:15:14.255421+00:00",
+  "git_commit": "4105093db7ba3ef60de5ac165d4326bf6786e6b3",
+  "segmenter_sha256": "bdcbb77d4872292721a5bce8328401274d1b7d917e5e413f173873c8cf886a1d",
+  "models": 27,
+  "evaluation_conditions": 81,
+  "predictions": 54999,
+  "validation_images": 679,
+  "validation_patients": 594,
+  "training_seeds": [
+    42,
+    123,
+    2026
+  ],
+  "training_correlations": [
+    0.5,
+    0.75,
+    1.0
+  ],
+  "regions": [
+    "interior",
+    "boundary",
+    "exterior"
+  ],
+  "warnings": []
+}

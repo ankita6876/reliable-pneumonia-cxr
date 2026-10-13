@@ -1,0 +1,23 @@
+{
+  "experiment": "alternative_recipe_soft020_seed42",
+  "seed": 42,
+  "train_n": 4581,
+  "validation_n": 979,
+  "input_mode": "soft_masked",
+  "mask_threshold": 0.5,
+  "soft_mask_outside_factor": 0.2,
+  "masking": "historical source-resolution",
+  "segmentation_sha256": "bdcbb77d4872292721a5bce8328401274d1b7d917e5e413f173873c8cf886a1d",
+  "weights": "IMAGENET1K_V2",
+  "pos_weight": 0.4022038567493113,
+  "optimizer": "AdamW",
+  "learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "batch_size": 32,
+  "epochs": 5,
+  "best_epoch": 1,
+  "best_validation_auroc": 0.7518539088936201,
+  "best_validation_auprc": 0.8653984571338801,
+  "chexpert_test_accessed": false,
+  "external_data_accessed": false
+}

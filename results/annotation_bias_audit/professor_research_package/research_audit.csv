@@ -1,0 +1,11 @@
+check,status,details
+Factorial coverage,PASS,"27 models, 81 conditions, 54,999 predictions"
+Paired validation cohort,PASS,"679 images, 594 patients; all 81 groups aligned"
+Checkpoint preservation,PASS,All 27 checkpoints found and SHA-256 recorded
+Clean prediction reproducibility,PASS,27/27 directly verified
+Seed aggregation,PASS,All nine seed-averaged conditions independently verified
+75% regional bootstrap contrasts,PASS,All three conditional 95% intervals exclude zero
+Across-seed directional replication,PASS,All nine 75% regional comparisons are positive
+50% negative control,PASS,All mean AUROC gaps are close to zero; formal equivalence not claimed
+Analysis source files,PASS,5/5 available
+Frozen segmenter identity,PASS,bdcbb77d4872292721a5bce8328401274d1b7d917e5e413f173873c8cf886a1d

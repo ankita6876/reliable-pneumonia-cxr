@@ -1,0 +1,17 @@
+{
+  "experiment": "repeated_spatial_patch_sensitivity",
+  "dataset": "CheXpert validation",
+  "n_images": 64,
+  "patch_size": 8,
+  "patches_per_region": 10,
+  "total_patch_predictions": 1920,
+  "seed": 42,
+  "decision_threshold": 0.2528664469718933,
+  "bootstrap_repetitions": 2000,
+  "sampling_unit_for_ci": "image",
+  "classifier": "frozen ResNet50 seed 42",
+  "segmenter": "frozen U-Net",
+  "control": "equal-sized contiguous black patches",
+  "reference": "original full image",
+  "exploratory": true
+}

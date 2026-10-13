@@ -1,0 +1,56 @@
+{
+  "dataset": "PadChest",
+  "cohort": {
+    "images": 95757,
+    "patients": 63706,
+    "positive_images": 3773,
+    "negative_images": 91984,
+    "prevalence": 0.039401819188153345
+  },
+  "P7": {
+    "AUROC": 0.681157433284356,
+    "AUROC_CI95": [
+      0.6726875090893875,
+      0.6900087250893248
+    ],
+    "AUPRC": 0.06926995953963551,
+    "AUPRC_CI95": [
+      0.06545020192664201,
+      0.07364708521087512
+    ]
+  },
+  "LCDR": {
+    "AUROC": 0.7498711431370749,
+    "AUROC_CI95": [
+      0.7418238559220185,
+      0.7582384816311224
+    ],
+    "AUPRC": 0.10964172120247388,
+    "AUPRC_CI95": [
+      0.10345204858087749,
+      0.11737197502413245
+    ]
+  },
+  "LCDR_minus_P7": {
+    "AUROC": 0.06871370985271896,
+    "AUROC_CI95": [
+      0.061183215752980524,
+      0.07612841447738845
+    ],
+    "AUPRC": 0.040371761662838374,
+    "AUPRC_CI95": [
+      0.035513527654335464,
+      0.04599989753798164
+    ]
+  },
+  "statistics": {
+    "paired_patient_cluster_bootstrap_replicates": 1000,
+    "seed": 42,
+    "auroc_noninferiority_margin": -0.01
+  },
+  "provenance": {
+    "prediction_sha256": "7672fdd57f253c0aa08f79f7767705bfbab45ddcd919997065db11ba423c0d5e",
+    "lcdr_checkpoint_sha256": "302728a6997d6ce5c1f30dd1098c05390fd29aad4f31f79e7cf68936652cf65f",
+    "p7_checkpoint_sha256": "bb3d82e4a13087efeb484ae9cd8478059c27aa006cbac5cefbe5c0c9a61157ac"
+  }
+}

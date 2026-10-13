@@ -1,0 +1,15 @@
+{
+  "best_epoch": 1,
+  "auroc": 0.6893862874227304,
+  "auprc": 0.8265696618063982,
+  "f1": 0.0,
+  "precision": 0.0,
+  "recall": 0.0,
+  "specificity": 1.0,
+  "accuracy": 0.3122238586156112,
+  "threshold": 0.5,
+  "tp": 0,
+  "tn": 212,
+  "fp": 0,
+  "fn": 467
+}

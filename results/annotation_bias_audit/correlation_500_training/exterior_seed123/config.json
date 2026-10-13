@@ -1,0 +1,21 @@
+{
+  "architecture": "ResNet50_shortcut_training",
+  "initialization": "IMAGENET1K_V2",
+  "seed": 123,
+  "lambda_bpec": 0.0,
+  "shortcut_region": "exterior",
+  "shortcut_correlation": 0.5,
+  "shortcut_size": 24,
+  "epochs": 3,
+  "batch_size": 8,
+  "backbone_lr": 1e-05,
+  "head_lr": 1e-05,
+  "weight_decay": 1e-05,
+  "patch_size": 8,
+  "patches_per_image": 2,
+  "boundary_radius": 12,
+  "classification_loss": "weighted_BCE",
+  "selection": "CheXpert validation AUROC",
+  "threshold": 0.5,
+  "external_labels_used": false
+}

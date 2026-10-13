@@ -1,0 +1,11 @@
+{
+  "experiment": "complementary_resnet50_multiseed",
+  "seed": 123,
+  "selection": "maximum CheXpert validation AUROC",
+  "test_used": false,
+  "external_data_used": false,
+  "best_epoch": 2,
+  "best_validation_AUROC": 0.7746356464768016,
+  "best_validation_AUPRC": 0.8831719969474207,
+  "pos_weight": 0.4022038567493113
+}

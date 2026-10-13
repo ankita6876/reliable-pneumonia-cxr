@@ -1,0 +1,42 @@
+{
+  "Step61_DenseNet": {
+    "AUROC": 0.768976,
+    "AUPRC": 0.876264,
+    "F1": 0.849421,
+    "style_AUROC_drop": 0.049246
+  },
+  "Step100_SCN": {
+    "AUROC": 0.751319,
+    "AUPRC": 0.862862,
+    "F1": 0.844743,
+    "style_AUROC_drop": 0.002288,
+    "decision": "REJECT"
+  },
+  "Step102_MS_SAM": {
+    "AUROC": 0.773589,
+    "AUPRC": 0.874339,
+    "F1": 0.853182,
+    "style_AUROC_drop": 0.028379
+  },
+  "Step103_MixStyle_only": {
+    "AUROC": 0.752759,
+    "AUPRC": 0.861205,
+    "F1": 0.848141,
+    "style_AUROC_drop": 0.02552,
+    "interpretation": "COMBINATION_REQUIRED"
+  },
+  "Step104_CXR_SDGNet": {
+    "AUROC": 0.779066,
+    "AUPRC": 0.880808,
+    "F1": 0.853786,
+    "precision": 0.787952,
+    "sensitivity": 0.931624,
+    "specificity": 0.364621,
+    "balanced_accuracy": 0.648122,
+    "style_AUROC": 0.747668,
+    "style_AUROC_drop": 0.031398,
+    "checkpoint_sha256": "afbac3f737ed2c6012ce751554dbae63099bce94980cb83ae176cc84520ab336",
+    "decision": "PROMOTE CXR-SDGNet"
+  },
+  "architecture_search": "CLOSED"
+}

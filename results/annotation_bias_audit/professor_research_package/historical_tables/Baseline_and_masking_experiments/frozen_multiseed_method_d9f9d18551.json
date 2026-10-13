@@ -1,0 +1,16 @@
+{
+  "method_name": "Complementary ResNet50 3-seed ensemble",
+  "training_dataset": "CheXpert",
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "ensemble_rule": "equal-weight arithmetic mean of logits",
+  "checkpoint_selection": "maximum CheXpert validation AUROC per seed",
+  "ensemble_frozen_on": "CheXpert validation",
+  "external_tuning": false,
+  "padchest_preprocessing": "fixed uint16 [0,65535] -> uint8 [0,255] -> RGB; no per-image contrast normalization",
+  "padchest_audit_note": "Initial direct PIL I;16 convert('RGB') evaluation was invalid due to saturation. Corrected evaluation changed preprocessing only; checkpoints, seeds, ensemble rule and cohort remained frozen.",
+  "kaggle_checkpoint_dataset": "ankitaroy123567/resnet50-multiseed-final"
+}

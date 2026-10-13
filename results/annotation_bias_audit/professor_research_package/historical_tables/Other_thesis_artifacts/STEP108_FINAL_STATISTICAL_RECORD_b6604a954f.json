@@ -1,0 +1,26 @@
+{
+  "step": "108C",
+  "status": "completed_with_CPRE_reconstruction_guard",
+  "bootstrap_replicates": 2000,
+  "bootstrap_method": "patient_cluster_bootstrap",
+  "noninferiority_margin_AUROC": -0.01,
+  "RSNA": {
+    "N": 26684,
+    "positive": 6012,
+    "comparisons": [
+      "CXR_SDGNet_vs_P7",
+      "CXR_SDGNet_vs_LCDR"
+    ]
+  },
+  "PadChest": {
+    "N": 95757,
+    "positive": 3773,
+    "patients": 63706,
+    "primary_exact_comparison": "CXR_SDGNet_vs_seed42",
+    "exploratory_comparison": "CXR_SDGNet_vs_Original_3Seed_Ensemble",
+    "locked_CPRE_paired_test": "NOT PERFORMED because exact locked CPRE prediction artifact was not mounted"
+  },
+  "important_guard": "Current equal-probability 3-seed ensemble must not be relabeled as locked corrected CPRE.",
+  "architecture_search_closed": true,
+  "external_labels_used_for_model_tuning": false
+}

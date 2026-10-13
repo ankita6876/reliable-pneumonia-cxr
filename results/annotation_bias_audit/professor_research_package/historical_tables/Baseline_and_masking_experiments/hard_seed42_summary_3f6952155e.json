@@ -1,0 +1,22 @@
+{
+  "experiment": "alternative_recipe_hard_mask_seed42",
+  "seed": 42,
+  "train_n": 4581,
+  "validation_n": 979,
+  "input_mode": "hard_masked",
+  "mask_threshold": 0.5,
+  "soft_factor": null,
+  "segmentation_sha256": "bdcbb77d4872292721a5bce8328401274d1b7d917e5e413f173873c8cf886a1d",
+  "masking": "historical source-resolution",
+  "weights": "IMAGENET1K_V2",
+  "pos_weight": 0.4022038567493113,
+  "lr": 0.0001,
+  "weight_decay": 0.0001,
+  "batch_size": 32,
+  "epochs": 5,
+  "best_epoch": 2,
+  "best_validation_auroc": 0.7314789101792711,
+  "best_validation_auprc": 0.8481353596845783,
+  "chexpert_test_accessed": false,
+  "external_data_accessed": false
+}
