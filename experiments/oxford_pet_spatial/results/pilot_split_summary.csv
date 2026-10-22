@@ -1,0 +1,4 @@
+split,cats,dogs,total
+test,1183,2486,3669
+train,950,1994,2944
+val,238,498,736

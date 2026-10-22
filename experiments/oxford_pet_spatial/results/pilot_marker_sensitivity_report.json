@@ -1,0 +1,60 @@
+{
+  "analysis": "paired_forced_marker_sensitivity",
+  "dataset_split": "validation_only",
+  "models": [
+    "interior",
+    "boundary",
+    "background"
+  ],
+  "checkpoint_retraining": false,
+  "intervention": "Compare forced marker type 0 versus type 1 at identical coordinates within each image",
+  "primary_metric": "mean_abs_probability_change",
+  "secondary_metric": "decision_flip_pct",
+  "limitations": [
+    "Models were trained with different placement distributions",
+    "The analysis does not isolate coordinate confounding",
+    "The validation set was previously used for checkpoint selection",
+    "Only one training seed is evaluated"
+  ],
+  "summary": [
+    {
+      "region": "interior",
+      "n_available": 725,
+      "availability_pct": 98.5054347826087,
+      "mean_abs_probability_change": 0.004246104412515455,
+      "median_abs_probability_change": 0.0012285709381103516,
+      "p95_abs_probability_change": 0.016270792484283432,
+      "max_abs_probability_change": 0.19516083598136902,
+      "decision_flip_count": 0,
+      "decision_flip_pct": 0.0,
+      "cat_mean_abs_change": 0.004278853194449659,
+      "dog_mean_abs_change": 0.004230199778666262
+    },
+    {
+      "region": "boundary",
+      "n_available": 736,
+      "availability_pct": 100.0,
+      "mean_abs_probability_change": 0.0023182192324374346,
+      "median_abs_probability_change": 0.00042373710311949253,
+      "p95_abs_probability_change": 0.007924915291368961,
+      "max_abs_probability_change": 0.14748162031173706,
+      "decision_flip_count": 0,
+      "decision_flip_pct": 0.0,
+      "cat_mean_abs_change": 0.0017405989769367577,
+      "dog_mean_abs_change": 0.002594270679845389
+    },
+    {
+      "region": "background",
+      "n_available": 733,
+      "availability_pct": 99.59239130434783,
+      "mean_abs_probability_change": 0.0007623817548550454,
+      "median_abs_probability_change": 0.0001665949821472168,
+      "p95_abs_probability_change": 0.002255359292030332,
+      "max_abs_probability_change": 0.13181883096694946,
+      "decision_flip_count": 0,
+      "decision_flip_pct": 0.0,
+      "cat_mean_abs_change": 0.0011675437953523756,
+      "dog_mean_abs_change": 0.0005711908321304015
+    }
+  ]
+}

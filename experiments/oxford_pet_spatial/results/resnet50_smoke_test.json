@@ -1,0 +1,14 @@
+{
+  "experiment": "oxford_pet_resnet50_smoke_test",
+  "seed": 42,
+  "device": "cuda",
+  "batch_size": 8,
+  "loss": 0.7266690135002136,
+  "output_shape": [
+    8,
+    2
+  ],
+  "gradients_finite": true,
+  "optimizer_step_completed": true,
+  "status": "passed"
+}

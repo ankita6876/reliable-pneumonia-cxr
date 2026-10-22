@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-22",
+  "phase": "Oxford-IIIT Pet spatial shortcut pilot",
+  "status": "pilot completed",
+  "models_trained": [
+    "clean",
+    "interior",
+    "boundary",
+    "background"
+  ],
+  "training_epochs_per_model": 3,
+  "validation_images": 736,
+  "clean_baseline_macro_f1": 0.9984,
+  "marker_sensitivity": {
+    "interior": 0.004246,
+    "boundary": 0.002318,
+    "background": 0.000762
+  },
+  "decision_flips": 0,
+  "test_set_used": false,
+  "interpretation": "All models performed near perfectly. Marker changes affected probabilities slightly but did not change predicted classes. Coordinate and occlusion confounding remain.",
+  "next_steps": [
+    "Verify marker assignment correlation and placement availability",
+    "Design a stronger shortcut-pressure experiment",
+    "Control coordinate and occlusion confounding",
+    "Run controlled experiments using multiple seeds",
+    "Preserve figures, tables and statistical results"
+  ]
+}

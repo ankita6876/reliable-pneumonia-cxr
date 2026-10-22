@@ -1,0 +1,20 @@
+{
+  "seed": 42,
+  "image_size": 224,
+  "patch_size": 24,
+  "epochs": 3,
+  "batch_size": 24,
+  "backbone_lr": 2e-05,
+  "head_lr": 0.0002,
+  "weight_decay": 0.0001,
+  "marker_correlation": 0.9,
+  "experiments": [
+    "clean",
+    "interior",
+    "boundary",
+    "background"
+  ],
+  "model": "resnet50_imagenet_pretrained",
+  "selection_metric": "clean_validation_macro_f1",
+  "test_set_used": false
+}

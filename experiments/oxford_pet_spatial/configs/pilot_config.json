@@ -1,0 +1,27 @@
+{
+  "experiment": "oxford_pet_clean_baseline_pilot",
+  "dataset": "Oxford-IIIT Pet",
+  "task": "cat_vs_dog",
+  "labels": {
+    "cat": 0,
+    "dog": 1
+  },
+  "seed": 42,
+  "image_size": 224,
+  "validation_fraction": 0.2,
+  "split_stratification": "official_class_id",
+  "test_policy": "held_out_until_design_frozen",
+  "model": "resnet50",
+  "pretrained": true,
+  "training_started": false,
+  "marker_size": 24,
+  "marker_correlations": [
+    0.5,
+    0.9
+  ],
+  "marker_regions": [
+    "interior",
+    "boundary_centered",
+    "background"
+  ]
+}

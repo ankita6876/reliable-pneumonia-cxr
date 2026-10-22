@@ -1,0 +1,6 @@
+{
+  "region": "interior",
+  "status": "completed",
+  "epochs": 3,
+  "best_clean_val_macro_f1": 0.9968951435996085
+}
