@@ -1,0 +1,41 @@
+{
+  "study": "Oxford-IIIT Pet spatial shortcut learning",
+  "status": "pilot protocol draft; not yet trained",
+  "task": "binary cat-versus-dog classification",
+  "dataset": "Oxford-IIIT Pet",
+  "development_split": "official trainval.txt",
+  "held_out_split": "official test.txt",
+  "image_size": 224,
+  "marker_size": 24,
+  "marker_pattern": "synthetic striped patch",
+  "regions": [
+    "interior",
+    "boundary_centered",
+    "background"
+  ],
+  "absolute_coordinate_controls": [
+    "top_left",
+    "top_right",
+    "bottom_left",
+    "bottom_right",
+    "center"
+  ],
+  "pilot_correlations": [
+    0.5,
+    0.9
+  ],
+  "pilot_seed": 42,
+  "proposed_backbone": "pretrained ResNet50",
+  "planned_evaluation": [
+    "clean",
+    "matching_marker",
+    "reversed_marker"
+  ],
+  "limitations": [
+    "coordinate distributions differ by region",
+    "object occlusion differs by placement",
+    "marker visibility is not yet controlled",
+    "cell-level common support is not image-level matching"
+  ],
+  "training_started": false
+}
