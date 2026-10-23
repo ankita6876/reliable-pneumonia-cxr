@@ -1,0 +1,10 @@
+model_id,cache_reused,cache_path
+clean_seed42,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/clean_seed42.npz
+clean_seed123,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/clean_seed123.npz
+clean_seed2026,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/clean_seed2026.npz
+center_seed42,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/center_seed42.npz
+center_seed123,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/center_seed123.npz
+center_seed2026,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/center_seed2026.npz
+bottom_right_seed42,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/bottom_right_seed42.npz
+bottom_right_seed123,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/bottom_right_seed123.npz
+bottom_right_seed2026,False,/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/bottom_right_seed2026.npz

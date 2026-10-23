@@ -1,0 +1,167 @@
+{
+  "experiment": "nico_spatial_paired_validation",
+  "status": "exploratory_pilot",
+  "manifest_sha256": "37804e81504d0184e171ca1691e7a1ac4d0d66f98edcb98dd8ddee2c043660c8",
+  "dataset": {
+    "train": 2282,
+    "validation": 489,
+    "locked_test": 489
+  },
+  "model_count": 9,
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "conditions": [
+    "clean",
+    "center",
+    "bottom_right"
+  ],
+  "positions": [
+    "top_left",
+    "top_right",
+    "bottom_left",
+    "bottom_right",
+    "center"
+  ],
+  "contexts": [
+    "autumn",
+    "dim",
+    "grass",
+    "outdoor",
+    "rock",
+    "water"
+  ],
+  "bootstrap": {
+    "repetitions": 2000,
+    "seed": 240126,
+    "stratification": "class_x_context",
+    "unit": "image",
+    "seed_uncertainty": "conditional_on_existing_3_seeds"
+  },
+  "test_accessed": false,
+  "training_performed": false,
+  "known_training_issue": "unused_mixed_precision_forward_updates_batchnorm",
+  "checkpoint_inventory": [
+    {
+      "model_id": "clean_seed42",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/clean_seed42.pt",
+      "size_mb": 94.35,
+      "sha256": "034cd5b28fdbc8004042fbe5d12aefe2e426e8f055423dfb8b0cb06a5861deee"
+    },
+    {
+      "model_id": "clean_seed123",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/clean_seed123.pt",
+      "size_mb": 94.35,
+      "sha256": "d90736fcc2b9f73eee09946c88eec7404c083b03065d8becfa8ea8a8416f472d"
+    },
+    {
+      "model_id": "clean_seed2026",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/clean_seed2026.pt",
+      "size_mb": 94.35,
+      "sha256": "811cd4b04159589bb1f779d5624a83b5880078ba897242e2c92f3af24c38ec52"
+    },
+    {
+      "model_id": "center_seed42",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/center_seed42.pt",
+      "size_mb": 94.35,
+      "sha256": "2295cf3a7b89a8d13903ae1c349d4b1c94d924f032afe02ab42772c86f74bbac"
+    },
+    {
+      "model_id": "center_seed123",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/center_seed123.pt",
+      "size_mb": 94.35,
+      "sha256": "5786fd444e0494c9cdb84950e41f006e0362cfbb1591492ad4f7d1513a993109"
+    },
+    {
+      "model_id": "center_seed2026",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/center_seed2026.pt",
+      "size_mb": 94.35,
+      "sha256": "38937c50f1d808d1a31d53bfc02caf09145bdcefd489efe1a7f0ea68321299ae"
+    },
+    {
+      "model_id": "bottom_right_seed42",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/bottom_right_seed42.pt",
+      "size_mb": 94.35,
+      "sha256": "ada5542ab9a245ff10cf4cbce57ab639ae5b2eed9e2b1bd3b07a31260923c2ae"
+    },
+    {
+      "model_id": "bottom_right_seed123",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/bottom_right_seed123.pt",
+      "size_mb": 94.35,
+      "sha256": "256a5076aba0cf4d2953eaf1b774abdfc1b424a85a0fd62fa30a3421bff26991"
+    },
+    {
+      "model_id": "bottom_right_seed2026",
+      "path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/checkpoints/bottom_right_seed2026.pt",
+      "size_mb": 94.35,
+      "sha256": "9f39be859a3c79ec18baf2f1b7626a0ec85a89920203d6b02560dc081a9fbdd3"
+    }
+  ],
+  "prediction_cache_audit": [
+    {
+      "model_id": "clean_seed42",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/clean_seed42.npz"
+    },
+    {
+      "model_id": "clean_seed123",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/clean_seed123.npz"
+    },
+    {
+      "model_id": "clean_seed2026",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/clean_seed2026.npz"
+    },
+    {
+      "model_id": "center_seed42",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/center_seed42.npz"
+    },
+    {
+      "model_id": "center_seed123",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/center_seed123.npz"
+    },
+    {
+      "model_id": "center_seed2026",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/center_seed2026.npz"
+    },
+    {
+      "model_id": "bottom_right_seed42",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/bottom_right_seed42.npz"
+    },
+    {
+      "model_id": "bottom_right_seed123",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/bottom_right_seed123.npz"
+    },
+    {
+      "model_id": "bottom_right_seed2026",
+      "cache_reused": false,
+      "cache_path": "/kaggle/working/reliable-pneumonia-cxr/experiments/nico_spatial/statistical_validation/predictions/bottom_right_seed2026.npz"
+    }
+  ],
+  "pilot_reproduction": [
+    {
+      "metric": "mean_abs_switch",
+      "maximum_absolute_difference": 5.960464477539063e-08
+    },
+    {
+      "metric": "decision_flip_rate",
+      "maximum_absolute_difference": 1.1102230246251565e-16
+    },
+    {
+      "metric": "mean_neutral_vs_clean",
+      "maximum_absolute_difference": 1.0011717750408461e-08
+    },
+    {
+      "metric": "mean_label_marker_vs_neutral",
+      "maximum_absolute_difference": 2.9802322443206464e-08
+    }
+  ]
+}

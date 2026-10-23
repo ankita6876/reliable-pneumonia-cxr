@@ -1,0 +1,5 @@
+contrast,metric,estimate,ci_lower,ci_upper
+center_trained_vs_clean_at_center,switch,0.8673140406608582,0.8561967015266418,0.8786400556564331
+bottom_right_trained_vs_clean_at_bottom_right,switch,0.6892598867416382,0.677663266658783,0.7010861039161682
+center_matched_minus_bottom_right,switch,0.7432861924171448,0.7289175987243652,0.757158637046814
+bottom_right_matched_minus_center,switch,0.21270592510700226,0.19301559031009674,0.23158732056617737

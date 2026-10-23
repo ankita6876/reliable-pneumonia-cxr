@@ -1,0 +1,5 @@
+metric,maximum_absolute_difference
+mean_abs_switch,5.960464477539063e-08
+decision_flip_rate,1.1102230246251565e-16
+mean_neutral_vs_clean,1.0011717750408461e-08
+mean_label_marker_vs_neutral,2.9802322443206464e-08

@@ -1,0 +1,37 @@
+{
+  "dataset": "NICO",
+  "classes": [
+    "airplane",
+    "car"
+  ],
+  "contexts": [
+    "autumn",
+    "dim",
+    "grass",
+    "outdoor",
+    "rock",
+    "water"
+  ],
+  "seed": 42,
+  "split": "70/15/15 stratified by class and context",
+  "duplicate_policy": "SHA256 deduplication before split; ambiguous groups excluded",
+  "test_policy": "Locked; no development-time evaluation",
+  "planned_model": "ResNet50",
+  "training_conditions": [
+    "clean",
+    "center",
+    "bottom_right"
+  ],
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "counterfactual_positions": [
+    "top_left",
+    "top_right",
+    "bottom_left",
+    "bottom_right",
+    "center"
+  ]
+}
