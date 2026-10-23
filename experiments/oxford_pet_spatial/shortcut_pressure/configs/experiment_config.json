@@ -1,0 +1,23 @@
+{
+  "experiment": "shortcut_pressure_5pct",
+  "seed": 42,
+  "train_fraction": 0.05,
+  "train_size": 148,
+  "validation_size": 722,
+  "epochs": 6,
+  "batch_size": 24,
+  "backbone_lr": 2e-05,
+  "head_lr": 0.0002,
+  "weight_decay": 0.0001,
+  "marker_correlation": 1.0,
+  "checkpoint_selection": "final_epoch",
+  "same_initial_weights": true,
+  "common_feasible_images": true,
+  "validation_conditions": [
+    "clean",
+    "matching",
+    "opposing"
+  ],
+  "official_test_used": false,
+  "bootstrap_repetitions": 1000
+}

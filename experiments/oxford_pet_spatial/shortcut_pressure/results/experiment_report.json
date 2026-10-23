@@ -1,0 +1,18 @@
+{
+  "status": "completed",
+  "research_question": "Does reduced clean training evidence increase reliance on label-correlated markers?",
+  "limitations": [
+    "Single training seed",
+    "Exploratory subset size",
+    "Marker placements have different coordinates and occlusion",
+    "No causal isolation of object relevance",
+    "Validation data is reused across exploratory studies",
+    "Bootstrap intervals quantify sampling variation, not seed variation"
+  ],
+  "next_steps": [
+    "Compare against the full-data pilot",
+    "Add coordinate-matched controls",
+    "Add four-corner and center placements",
+    "Replicate selected conditions with multiple seeds"
+  ]
+}

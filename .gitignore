@@ -40,3 +40,10 @@ outputs/*
 *.zip
 # Oxford Pet trained checkpoints
 experiments/oxford_pet_spatial/checkpoints/
+
+# Oxford Pet shortcut-pressure checkpoints
+experiments/oxford_pet_spatial/shortcut_pressure/checkpoints/
+experiments/oxford_pet_spatial/absolute_positions/checkpoints/
+
+experiments/oxford_pet_spatial/shortcut_pressure/checkpoints/
+experiments/oxford_pet_spatial/absolute_positions/checkpoints/
