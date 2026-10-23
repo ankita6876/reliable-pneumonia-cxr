@@ -1,0 +1,6 @@
+{
+  "manifest_sha256": "37804e81504d0184e171ca1691e7a1ac4d0d66f98edcb98dd8ddee2c043660c8",
+  "method": "64-bit DCT perceptual hash",
+  "hash_size": 8,
+  "highfreq_factor": 4
+}
