@@ -1,0 +1,10 @@
+model,condition,seed,status,best_epoch,best_val_auroc
+clean_seed42,clean,42,trained,3,0.9953999661762218
+clean_seed123,clean,123,trained,6,0.9947234906139016
+clean_seed2026,clean,2026,trained,1,0.9969896837476746
+center_seed42,center,42,trained,1,1.0
+center_seed123,center,123,trained,1,1.0
+center_seed2026,center,2026,trained,1,1.0
+bottom_right_seed42,bottom_right,42,trained,1,1.0
+bottom_right_seed123,bottom_right,123,trained,2,1.0
+bottom_right_seed2026,bottom_right,2026,trained,1,1.0
