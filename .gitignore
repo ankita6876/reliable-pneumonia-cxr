@@ -47,3 +47,5 @@ experiments/oxford_pet_spatial/absolute_positions/checkpoints/
 
 experiments/oxford_pet_spatial/shortcut_pressure/checkpoints/
 experiments/oxford_pet_spatial/absolute_positions/checkpoints/
+
+experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/

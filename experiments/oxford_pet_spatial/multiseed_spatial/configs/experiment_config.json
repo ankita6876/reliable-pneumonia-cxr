@@ -1,0 +1,27 @@
+{
+  "experiment": "multiseed_spatial_replication",
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "new_training_seeds": [
+    123,
+    2026
+  ],
+  "regions": [
+    "clean",
+    "interior",
+    "background",
+    "center",
+    "bottom_right"
+  ],
+  "training_size": 148,
+  "validation_size": 722,
+  "epochs": 6,
+  "batch_size": 24,
+  "marker_correlation": 1.0,
+  "checkpoint_selection": "final_epoch",
+  "official_test_used": false,
+  "bootstrap_repetitions": 2000
+}

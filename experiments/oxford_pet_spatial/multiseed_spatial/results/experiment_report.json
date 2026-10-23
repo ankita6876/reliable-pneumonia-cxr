@@ -1,0 +1,18 @@
+{
+  "status": "completed",
+  "objective": "Replicate spatial marker sensitivity across three training seeds and characterize marker-animal overlap.",
+  "important_caveats": [
+    "Single fixed 148-image training subset",
+    "Only three training seeds",
+    "Object-relative and absolute positions are not coordinate matched",
+    "Foreground overlap is descriptive, not causal identification",
+    "Validation set has been used for exploratory analysis",
+    "Official test remains untouched"
+  ],
+  "future_work": [
+    "Coordinate-matched intervention",
+    "Within-image counterfactual placements",
+    "Patient-independent clinical replication where applicable",
+    "Final held-out evaluation after protocol lock"
+  ]
+}
