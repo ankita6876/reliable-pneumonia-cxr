@@ -1,0 +1,16 @@
+region,seed,exists,size_mb,path
+background,42,True,90.0,experiments/oxford_pet_spatial/shortcut_pressure/checkpoints/background_final.pt
+background,123,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/background_seed123_final.pt
+background,2026,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/background_seed2026_final.pt
+bottom_right,42,True,90.0,experiments/oxford_pet_spatial/absolute_positions/checkpoints/bottom_right_final.pt
+bottom_right,123,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/bottom_right_seed123_final.pt
+bottom_right,2026,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/bottom_right_seed2026_final.pt
+center,42,True,90.0,experiments/oxford_pet_spatial/absolute_positions/checkpoints/center_final.pt
+center,123,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/center_seed123_final.pt
+center,2026,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/center_seed2026_final.pt
+clean,42,True,90.0,experiments/oxford_pet_spatial/shortcut_pressure/checkpoints/clean_final.pt
+clean,123,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/clean_seed123_final.pt
+clean,2026,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/clean_seed2026_final.pt
+interior,42,True,90.0,experiments/oxford_pet_spatial/shortcut_pressure/checkpoints/interior_final.pt
+interior,123,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/interior_seed123_final.pt
+interior,2026,True,90.0,experiments/oxford_pet_spatial/multiseed_spatial/checkpoints/interior_seed2026_final.pt

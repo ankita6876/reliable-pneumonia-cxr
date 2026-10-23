@@ -1,0 +1,12 @@
+{
+  "validation_count": 722,
+  "unique_validation_images": 722,
+  "models_expected": 15,
+  "models_found_in_results": 15,
+  "checkpoint_files_present": 15,
+  "counterfactual_model_position_rows": 105,
+  "neutral_control_model_position_rows": 105,
+  "official_test_evaluated_by_this_cell": false,
+  "protocol_status": "draft \u2014 supervisor review required",
+  "clinical_proposed_model_verified": false
+}
