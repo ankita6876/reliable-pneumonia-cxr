@@ -1,0 +1,38 @@
+{
+  "experiment": "coordinate_counterfactual",
+  "status": "completed",
+  "validation_images": 722,
+  "model_conditions": [
+    "clean",
+    "interior",
+    "background",
+    "center",
+    "bottom_right"
+  ],
+  "seeds_requested": [
+    42,
+    123,
+    2026
+  ],
+  "checkpoints_available": 15,
+  "checkpoints_missing": [],
+  "tested_positions": [
+    "top_left",
+    "top_right",
+    "bottom_left",
+    "bottom_right",
+    "center",
+    "interior",
+    "background"
+  ],
+  "official_test_used": false,
+  "interpretation": "Inference-time counterfactual marker-orientation sensitivity at fixed positions within each model. Position comparisons are paired by image and model.",
+  "limitations": [
+    "Models were trained under different marker placements",
+    "Only three training seeds were planned",
+    "Position changes alter which image pixels are occluded",
+    "No causal isolation of training-time position effects",
+    "Validation cohort used for exploratory analysis",
+    "Official test not evaluated"
+  ]
+}
