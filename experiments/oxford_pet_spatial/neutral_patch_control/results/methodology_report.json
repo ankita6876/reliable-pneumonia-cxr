@@ -1,0 +1,20 @@
+{
+  "status": "completed",
+  "research_question": "How does sensitivity to synthetic marker encoding compare with the effect of occluding the same image region using a neutral patch?",
+  "definitions": {
+    "encoding_effect": "|p(marker1)-p(marker0)|",
+    "neutral_occlusion": "|p(neutral)-p(clean)|",
+    "marker_vs_neutral": "0.5*(|p(marker0)-p(neutral)|+|p(marker1)-p(neutral)|)",
+    "encoding_minus_neutral": "encoding_effect-neutral_occlusion"
+  },
+  "interpretation_rules": [
+    "All patch comparisons are paired within image, model, and location",
+    "Encoding minus neutral is descriptive, not an additive causal decomposition",
+    "A fixed RGB gray patch is only one occlusion control",
+    "Patch replacement also changes local image texture and contrast",
+    "Three seeds provide limited information about training variability",
+    "Bootstrap intervals are exploratory",
+    "Validation results are not final held-out test results"
+  ],
+  "official_test_used": false
+}

@@ -1,0 +1,40 @@
+{
+  "experiment": "neutral_patch_control",
+  "dataset": "Oxford-IIIT Pet",
+  "validation_images": 722,
+  "trained_regions": [
+    "clean",
+    "interior",
+    "background",
+    "center",
+    "bottom_right"
+  ],
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "tested_positions": [
+    "top_left",
+    "top_right",
+    "bottom_left",
+    "bottom_right",
+    "center",
+    "interior",
+    "background"
+  ],
+  "image_size": 224,
+  "patch_size": 24,
+  "neutral_patch_rgb": [
+    128,
+    128,
+    128
+  ],
+  "marker_patterns": [
+    "vertical stripes",
+    "horizontal stripes"
+  ],
+  "bootstrap_repetitions": 2000,
+  "training_performed": false,
+  "official_test_used": false
+}
