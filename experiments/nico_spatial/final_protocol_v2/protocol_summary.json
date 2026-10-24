@@ -1,0 +1,18 @@
+{
+  "protocol": "NICO conservative final protocol v2",
+  "created_utc": "2026-10-24T04:52:25.820813+00:00",
+  "total_images": 3260,
+  "split_counts": {
+    "train": 2133,
+    "val": 557,
+    "test": 489,
+    "excluded": 81
+  },
+  "flagged_near_duplicate_pairs": 361,
+  "remaining_active_cross_split_pairs": 0,
+  "original_test_images": 489,
+  "original_validation_images_moved_to_train": 0,
+  "original_test_images_used_in_v2_development": 426,
+  "manifest_sha256": "c1ebe811b76e662664c161b0aa4af9da83d8984c036e93b0bdb8d4f9d880847a",
+  "historical_holdout_status": "Retrospective, not prospectively untouched."
+}
