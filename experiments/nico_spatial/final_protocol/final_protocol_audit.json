@@ -1,0 +1,33 @@
+{
+  "n_images": 3260,
+  "n_unique_phashes": 2959,
+  "n_near_duplicate_pairs_le8": 361,
+  "n_cross_v1_pairs_le8": 162,
+  "n_cross_v2_pairs_le8": 14,
+  "n_duplicate_groups": 2912,
+  "n_groups_size_gt1": 336,
+  "largest_group": 4,
+  "reserved_original_test": 489,
+  "excluded_test_connected": 81,
+  "development_remaining": 2690,
+  "final_split_counts": {
+    "train": 2287,
+    "test": 489,
+    "val": 403,
+    "excluded": 81
+  },
+  "remaining_cross_split_pairs": 0,
+  "manifest_sha256": "395cb4d642b4164c539948a12faafb18cf3609ea88899f82cba49f6c79d7e466",
+  "historical_exposure": {
+    "original_test_total": 489,
+    "original_test_used_in_v2_train_or_val": 426,
+    "original_test_still_in_v2_test": 63,
+    "note": "The proposed test cohort was reserved in v1, but most of it was reassigned during v2. It cannot be claimed as prospectively untouched by the full research workflow."
+  },
+  "distance_distribution": {
+    "0": 310,
+    "2": 45,
+    "6": 3,
+    "8": 3
+  }
+}
