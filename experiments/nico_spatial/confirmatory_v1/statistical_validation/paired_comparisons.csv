@@ -1,0 +1,7 @@
+comparison,condition_a,position_a,condition_b,position_b,estimate,ci_low,ci_high
+center vs clean at center,center,center,clean,center,0.9738348590764251,0.9702975438622692,0.9770167372364796
+bottom-right vs clean at bottom-right,bottom_right,bottom_right,clean,bottom_right,0.9347228909212985,0.9279115318376804,0.9408961115551298
+center-trained: center vs bottom-right,center,center,center,bottom_right,0.3201995341886894,0.31059110549314495,0.3299517085426139
+bottom-right-trained: bottom-right vs center,bottom_right,bottom_right,bottom_right,center,0.3849397667853537,0.37035950252795297,0.40012730684706804
+center vs bottom-right training at center,center,center,bottom_right,center,0.4404877010599641,0.42285635941539657,0.45898079871414876
+center vs bottom-right training at bottom-right,center,bottom_right,bottom_right,bottom_right,-0.26465159991407905,-0.27411771112528943,-0.25499007234167276

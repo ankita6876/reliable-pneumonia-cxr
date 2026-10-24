@@ -1,0 +1,4 @@
+condition,position,minimum_context,maximum_context,minimum_effect,maximum_effect,range
+clean,center,autumn,grass,0.015702395257871343,0.031783248583656956,0.016080853325785613
+center,center,rock,grass,0.996065015705155,0.9976100434482201,0.001545027743065086
+bottom_right,bottom_right,autumn,grass,0.921751554471111,0.9679959993506473,0.04624444487953627

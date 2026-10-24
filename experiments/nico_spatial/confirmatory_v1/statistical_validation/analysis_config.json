@@ -1,0 +1,14 @@
+{
+  "bootstrap_repetitions": 2000,
+  "bootstrap_seed": 20261024,
+  "bootstrap_strata": [
+    "label",
+    "context"
+  ],
+  "unit_of_resampling": "image",
+  "seed_aggregation": "mean of three fitted seeds",
+  "interval": "percentile 95%",
+  "multiple_comparison_adjustment": "none",
+  "manifest_sha256": "c1ebe811b76e662664c161b0aa4af9da83d8984c036e93b0bdb8d4f9d880847a",
+  "test_inference": false
+}
