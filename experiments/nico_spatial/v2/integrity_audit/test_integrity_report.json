@@ -1,0 +1,8 @@
+{
+  "v2_test_total": 489,
+  "v2_test_previously_in_v1_development": 426,
+  "v2_test_originally_in_v1_test": 63,
+  "eligible_original_test_only_images": 56,
+  "model_inference_performed": false,
+  "interpretation": "Eligible images were in the original v1 test partition and have no v2 perceptual-duplicate group containing original v1 training or validation images."
+}
