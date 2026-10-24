@@ -1,0 +1,29 @@
+{
+  "protocol": "confirmatory-v1",
+  "manifest_sha256": "c1ebe811b76e662664c161b0aa4af9da83d8984c036e93b0bdb8d4f9d880847a",
+  "backbone": "resnet50",
+  "initialization": "ImageNet1K_V1",
+  "image_size": 224,
+  "patch_size": 24,
+  "epochs": 6,
+  "batch_size": 32,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "optimizer": "AdamW",
+  "loss": "BCEWithLogitsLoss",
+  "augmentation": "none",
+  "precision": "FP32",
+  "checkpoint_selection": "matched validation AUROC",
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "conditions": [
+    "clean",
+    "center",
+    "bottom_right"
+  ],
+  "test_evaluation": false,
+  "note": "New documented implementation. Original NICO v2 training script was unavailable for exact reproduction."
+}
