@@ -1,0 +1,8 @@
+{
+  "condition": "random_100",
+  "seed": 42,
+  "best_epoch": 1,
+  "best_validation_auroc": 1.0,
+  "prediction_rows": 8912,
+  "checkpoint": "experiments/nico_spatial/shortcut_controls_v1/random_100_seed42/best_model.pt"
+}

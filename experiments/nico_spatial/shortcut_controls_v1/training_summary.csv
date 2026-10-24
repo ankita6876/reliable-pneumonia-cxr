@@ -1,0 +1,13 @@
+condition,seed,best_epoch,best_validation_auroc,prediction_rows,checkpoint
+center_75,42,2,0.9963414003516392,8912,experiments/nico_spatial/shortcut_controls_v1/center_75_seed42/best_model.pt
+center_75,123,6,0.994570276140242,8912,experiments/nico_spatial/shortcut_controls_v1/center_75_seed123/best_model.pt
+center_75,2026,2,0.9955010859447719,8912,experiments/nico_spatial/shortcut_controls_v1/center_75_seed2026/best_model.pt
+bottom_right_75,42,1,0.9975566242631089,8912,experiments/nico_spatial/shortcut_controls_v1/bottom_right_75_seed42/best_model.pt
+bottom_right_75,123,3,0.9987201365187713,8912,experiments/nico_spatial/shortcut_controls_v1/bottom_right_75_seed123/best_model.pt
+bottom_right_75,2026,2,0.9963801840934947,8912,experiments/nico_spatial/shortcut_controls_v1/bottom_right_75_seed2026/best_model.pt
+random_75,42,5,0.9980995966490847,8912,experiments/nico_spatial/shortcut_controls_v1/random_75_seed42/best_model.pt
+random_75,123,6,0.9984227944978799,8912,experiments/nico_spatial/shortcut_controls_v1/random_75_seed123/best_model.pt
+random_75,2026,6,0.9957337883959045,8912,experiments/nico_spatial/shortcut_controls_v1/random_75_seed2026/best_model.pt
+random_100,42,1,1.0,8912,experiments/nico_spatial/shortcut_controls_v1/random_100_seed42/best_model.pt
+random_100,123,1,1.0,8912,experiments/nico_spatial/shortcut_controls_v1/random_100_seed123/best_model.pt
+random_100,2026,1,1.0,8912,experiments/nico_spatial/shortcut_controls_v1/random_100_seed2026/best_model.pt

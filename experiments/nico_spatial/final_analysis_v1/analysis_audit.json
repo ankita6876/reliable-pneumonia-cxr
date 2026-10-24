@@ -1,0 +1,22 @@
+{
+  "analysis_version": "final_analysis_v1",
+  "timestamp_utc": "2026-10-24T08:56:54.165507+00:00",
+  "manifest_sha256": "c1ebe811b76e662664c161b0aa4af9da83d8984c036e93b0bdb8d4f9d880847a",
+  "train_images": 2133,
+  "validation_images": 557,
+  "reserved_test_images": 489,
+  "test_inference_performed": false,
+  "models_verified": 12,
+  "prediction_rows_verified": 106944,
+  "bootstrap_repetitions": 2000,
+  "bootstrap_unit": "image",
+  "bootstrap_stratification": "class x context",
+  "seed_handling": "three-seed mean before image bootstrap",
+  "limitations": [
+    "Validation also used for checkpoint selection",
+    "Historical NICO test exposure prevents an untouched-test claim",
+    "Marker implementation not verified identical to historical runs",
+    "Bootstrap does not incorporate training-seed uncertainty",
+    "No multiplicity adjustment for exploratory comparisons"
+  ]
+}

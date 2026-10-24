@@ -1,0 +1,8 @@
+{
+  "condition": "center_75",
+  "seed": 2026,
+  "best_epoch": 2,
+  "best_validation_auroc": 0.9955010859447719,
+  "prediction_rows": 8912,
+  "checkpoint": "experiments/nico_spatial/shortcut_controls_v1/center_75_seed2026/best_model.pt"
+}
