@@ -1,0 +1,4 @@
+dataset,completed_models,verified_finding,evidence_status
+CheXpert,27,"At 75% correlation, shortcut vulnerability varies across interior, boundary, and exterior.",Recomputed from saved predictions
+Oxford-IIIT Pet,15,Spatial shortcut experiments completed; quantitative results require table-level verification.,Experiment completion documented
+NICO,21,"Location randomization substantially reduces sensitivity at 75% correlation, but not at 100%.",Previously documented three-seed control results
