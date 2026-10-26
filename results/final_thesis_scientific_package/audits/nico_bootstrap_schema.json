@@ -1,0 +1,16 @@
+{
+  "source": "experiments/nico_spatial/statistical_validation/tables/paired_bootstrap_spatial.csv",
+  "rows": 60,
+  "columns": [
+    "condition",
+    "position",
+    "metric",
+    "estimate",
+    "ci_lower",
+    "ci_upper",
+    "n_images",
+    "n_seeds",
+    "bootstrap_reps",
+    "interval_scope"
+  ]
+}

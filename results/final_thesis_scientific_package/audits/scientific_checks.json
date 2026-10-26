@@ -1,0 +1,13 @@
+{
+  "checks": {
+    "chexpert_three_seeds": true,
+    "chexpert_27_configurations": true,
+    "chexpert_hierarchy_all_seeds": true,
+    "nico_random100_greater_all_positions": true,
+    "pet_matrix_nonempty": true,
+    "nico_mean_valid_probability_range": true,
+    "pet_matrix_nonnegative": true,
+    "all_required_sources_loaded": true
+  },
+  "missing_sources": []
+}

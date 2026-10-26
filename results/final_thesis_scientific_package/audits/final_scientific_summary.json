@@ -1,0 +1,28 @@
+{
+  "generated_utc": "2026-10-26T04:59:06.083729+00:00",
+  "source_tables_loaded": 13,
+  "source_tables_expected": 13,
+  "missing_sources": [],
+  "chexpert_models": 27,
+  "chexpert_hierarchy_all_seeds": true,
+  "pet_strongest_region": "bottom_right",
+  "pet_strongest_mean_abs_change": 0.0277508353420627,
+  "nico_random75_mean_sensitivity": 0.046521359211947715,
+  "nico_random100_mean_sensitivity": 0.951107739075909,
+  "nico_difference": 0.9045863798639613,
+  "nico_random100_greater_all_positions": true,
+  "training_performed": false,
+  "gpu_used": false,
+  "natural_artifact_validation": false,
+  "scientific_checks": {
+    "chexpert_three_seeds": true,
+    "chexpert_27_configurations": true,
+    "chexpert_hierarchy_all_seeds": true,
+    "nico_random100_greater_all_positions": true,
+    "pet_matrix_nonempty": true,
+    "nico_mean_valid_probability_range": true,
+    "pet_matrix_nonnegative": true,
+    "all_required_sources_loaded": true
+  },
+  "professor_report": "results/final_thesis_scientific_package/professor_ready_final_scientific_report.md"
+}

@@ -1,0 +1,52 @@
+{
+  "columns": [
+    "condition",
+    "seed",
+    "position",
+    "abs_switch",
+    "signed_switch",
+    "decision_flip"
+  ],
+  "first_five_rows": [
+    {
+      "condition": "center_75",
+      "seed": 42,
+      "position": "top_left",
+      "abs_switch": 0.0296093303224343,
+      "signed_switch": 0.0296093303224343,
+      "decision_flip": 0.0197486535008976
+    },
+    {
+      "condition": "center_75",
+      "seed": 42,
+      "position": "top_right",
+      "abs_switch": 0.0205131355481986,
+      "signed_switch": 0.0205130427372328,
+      "decision_flip": 0.0125673249551166
+    },
+    {
+      "condition": "center_75",
+      "seed": 42,
+      "position": "bottom_left",
+      "abs_switch": 0.0319431453679444,
+      "signed_switch": 0.0319431453679444,
+      "decision_flip": 0.0161579892280071
+    },
+    {
+      "condition": "center_75",
+      "seed": 42,
+      "position": "bottom_right",
+      "abs_switch": 0.0271934554154513,
+      "signed_switch": 0.0271696005023048,
+      "decision_flip": 0.0071813285457809
+    },
+    {
+      "condition": "center_75",
+      "seed": 42,
+      "position": "center",
+      "abs_switch": 0.1000891138762858,
+      "signed_switch": 0.1000813280393096,
+      "decision_flip": 0.0825852782764811
+    }
+  ]
+}
