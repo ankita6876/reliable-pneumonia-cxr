@@ -1,0 +1,14 @@
+{
+  "created_utc": "2026-10-26T04:46:20.414269+00:00",
+  "source_path": "results/annotation_bias_audit/professor_research_package/historical_tables/Final_shortcut_analysis/all_paired_predictions_9eef01a963.csv",
+  "source_sha256": "9eef01a963aac2b524b2bfe67bb4aaea31a328f71529c11f21ce3d70266d4c87",
+  "source_rows": 54999,
+  "reconstructed_seed_groups": 27,
+  "reconstructed_summary_groups": 9,
+  "bootstrap_repetitions": 2000,
+  "bootstrap_unit": "patient",
+  "bootstrap_scope": "within_seed",
+  "seed_uncertainty_included": false,
+  "model_training_performed": false,
+  "external_artifact_validation_performed": false
+}
