@@ -1,0 +1,40 @@
+{
+  "dataset": "CIFAR-10",
+  "source": "torchvision CIFAR10 official archive",
+  "training_sizes": [
+    5000,
+    15000,
+    50000
+  ],
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "num_classes": 10,
+  "marker_reliabilities": [
+    "independent",
+    "0.5",
+    "0.75",
+    "1.0"
+  ],
+  "marker_positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "marker_size": 4,
+  "subset_construction": "nested class-stratified subsets",
+  "subset_sizes_per_class": {
+    "5000": 500,
+    "15000": 1500,
+    "50000": 5000
+  },
+  "independent_control": "Balanced marker codes randomly assigned independently of labels.",
+  "chance_marker_match_rate": 0.1,
+  "planned_backbone": "ImageNet pretrained ResNet18",
+  "planned_head": "linear multiclass classifier",
+  "planned_model_selection": "validation macro-F1",
+  "training_completed": false,
+  "created_utc": "2026-10-28T05:29:20.283435+00:00"
+}
