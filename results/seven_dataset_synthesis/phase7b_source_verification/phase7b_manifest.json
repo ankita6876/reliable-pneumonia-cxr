@@ -1,0 +1,23 @@
+{
+  "phase": "7B",
+  "created_utc": "2026-10-28T07:11:46.237937+00:00",
+  "starting_commit": "b0fee72b95e0e8b328bedd528c093cb6b8b5cbbf",
+  "datasets": [
+    "chexpert",
+    "oxford_pet",
+    "nico",
+    "breastmnist",
+    "dermamnist",
+    "cifar10",
+    "pathmnist"
+  ],
+  "tables_profiled": 299,
+  "scripts_inspected": 21,
+  "provisional_normalized_rows": 600,
+  "protocol_known_reference_rows": 12,
+  "training_size_candidates": 6,
+  "training_performed": false,
+  "datasets_downloaded": false,
+  "google_drive_used": false,
+  "cross_dataset_results_certified": false
+}

@@ -1,0 +1,7 @@
+dataset,source,size_column,training_sizes,number_of_sizes,rows,status
+cifar10,results/benchmark_expansion/cifar10/training/tables/all_shortcut_reliance.csv,training_size,"[5000, 15000, 45000]",3,351,candidate_requires_protocol_review
+cifar10,results/benchmark_expansion/cifar10/training/tables/size_ablation_summary.csv,training_size,"[5000, 15000, 45000]",3,36,candidate_requires_protocol_review
+cifar10,results/benchmark_expansion/cifar10/training/tables/all_evaluation_metrics.csv,training_size,"[5000, 15000, 45000]",3,1404,candidate_requires_protocol_review
+cifar10,results/benchmark_expansion/cifar10/tables/cifar10_marker_audit.csv,training_size,"[5000, 15000, 50000]",3,108,candidate_requires_protocol_review
+cifar10,results/benchmark_expansion/cifar10/tables/nested_stratified_subsets.csv,training_size,"[5000, 15000, 50000]",3,210000,candidate_requires_protocol_review
+cifar10,results/benchmark_expansion/cifar10/training/tables/leakage_free_nested_subsets.csv,training_size,"[5000, 15000, 45000]",3,195000,candidate_requires_protocol_review

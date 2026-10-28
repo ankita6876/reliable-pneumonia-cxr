@@ -1,0 +1,8 @@
+dataset,source_tables_inspected,experiment_scripts_inspected,spatial_table_candidates,provisional_normalized_rows,training_size_table_candidates,protocol_known_test_reference,fully_cross_dataset_comparable,next_action
+chexpert,8,10,1,0,0,False,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
+oxford_pet,167,6,167,0,0,False,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
+nico,89,0,87,0,0,False,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
+breastmnist,7,0,4,0,0,False,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
+dermamnist,11,1,6,0,0,False,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
+cifar10,7,1,4,360,6,False,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
+pathmnist,10,3,7,240,0,True,False,"Verify counterfactual contrast, evaluation split, marker protocol and seed aggregation"
