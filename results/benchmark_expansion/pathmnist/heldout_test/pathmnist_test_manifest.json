@@ -1,0 +1,29 @@
+{
+  "dataset": "PathMNIST",
+  "evaluation_split": "official_test",
+  "test_images": 7180,
+  "classes": 9,
+  "models_evaluated": 39,
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "reliabilities": [
+    "independent",
+    "0.5",
+    "0.75",
+    "1.0"
+  ],
+  "positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "architecture": "ResNet18",
+  "backbone_frozen": true,
+  "head_checkpoints_reused": true,
+  "model_retraining": false,
+  "bootstrap_iterations": 1000,
+  "created_utc": "2026-10-28T06:47:55.467222+00:00"
+}
