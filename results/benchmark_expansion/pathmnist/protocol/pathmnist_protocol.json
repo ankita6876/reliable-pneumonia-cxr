@@ -1,0 +1,35 @@
+{
+  "dataset": "PathMNIST",
+  "source": "Official MedMNIST",
+  "resolution": 64,
+  "num_classes": 9,
+  "train_size": 89996,
+  "validation_size": 10004,
+  "test_size": 7180,
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "reliabilities": [
+    "independent",
+    "0.5",
+    "0.75",
+    "1.0"
+  ],
+  "positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "marker_size": 8,
+  "marker_codes": "Nine balanced binary 8x8 patterns",
+  "independent_expected_match_rate": 0.1111111111111111,
+  "architecture": "ImageNet-pretrained ResNet18",
+  "planned_head": "Linear(512, 9)",
+  "backbone_frozen": true,
+  "model_selection": "Validation macro-F1",
+  "test_split_reserved": true,
+  "training_completed": false,
+  "created_utc": "2026-10-28T05:58:12.008919+00:00"
+}

@@ -1,0 +1,11 @@
+{
+  "dataset": "PathMNIST",
+  "dataset_file": "pathmnist_64.npz",
+  "medmnist_version": "3.0.2",
+  "class_distribution_saved": true,
+  "marker_audit_passed": true,
+  "marker_conditions": 36,
+  "training_started": false,
+  "test_model_evaluation_started": false,
+  "created_utc": "2026-10-28T05:58:12.010025+00:00"
+}
