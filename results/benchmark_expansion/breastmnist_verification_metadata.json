@@ -1,0 +1,14 @@
+{
+  "dataset": "BreastMNIST",
+  "source": "Official MedMNIST+ Zenodo",
+  "source_url": "https://zenodo.org/records/10519652/files/breastmnist_64.npz?download=1",
+  "resolution": 64,
+  "md5": "742edef2a1fd1524b2efff4bd7ba9364",
+  "official_splits_verified": true,
+  "training_images": 546,
+  "validation_images": 78,
+  "test_images": 156,
+  "timestamp_utc": "2026-10-28T04:27:31.112383+00:00",
+  "gpu_training_performed": false,
+  "google_drive_used": false
+}

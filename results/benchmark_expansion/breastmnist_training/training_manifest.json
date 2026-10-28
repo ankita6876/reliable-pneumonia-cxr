@@ -1,0 +1,35 @@
+{
+  "study": "BreastMNIST spatial shortcut expansion",
+  "dataset": "BreastMNIST+ 64x64",
+  "dataset_md5": "742edef2a1fd1524b2efff4bd7ba9364",
+  "architecture": "ResNet18",
+  "pretraining": "ImageNet1K_V1 if available",
+  "backbone_frozen": true,
+  "head": "Linear(512,1)",
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "reliabilities": [
+    0.5,
+    0.75,
+    1.0
+  ],
+  "positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "marker_size": 6,
+  "epochs_max": 18,
+  "patience": 4,
+  "batch_size": 32,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "n_models": 30,
+  "completed_runs": 30,
+  "gpu_available": true,
+  "google_drive_used": false,
+  "timestamp_utc": "2026-10-28T04:36:15.959282+00:00"
+}

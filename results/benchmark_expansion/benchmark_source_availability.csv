@@ -1,0 +1,5 @@
+dataset,source,training_images,status,http_code
+BreastMNIST,Official MedMNIST+ Zenodo,546,REACHABLE,200
+DermaMNIST,Official MedMNIST+ Zenodo,7007,REACHABLE,200
+PathMNIST,Official MedMNIST+ Zenodo,89996,REACHABLE,200
+CIFAR-10,University of Toronto,50000,REACHABLE,200

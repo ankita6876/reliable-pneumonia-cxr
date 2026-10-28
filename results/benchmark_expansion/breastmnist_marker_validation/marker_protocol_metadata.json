@@ -1,0 +1,41 @@
+{
+  "dataset": "BreastMNIST",
+  "dataset_md5": "742edef2a1fd1524b2efff4bd7ba9364",
+  "resolution": [
+    64,
+    64
+  ],
+  "marker_size": 6,
+  "marker_margin": 2,
+  "marker_codes": {
+    "0": "dark center, bright border",
+    "1": "bright center, dark border"
+  },
+  "reliabilities": [
+    0.5,
+    0.75,
+    1.0
+  ],
+  "positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "conditions_audited": 27,
+  "reliability_definition": "Fraction of samples where marker code equals class label, stratified by class.",
+  "counterfactual_conditions": [
+    "matching",
+    "reversed",
+    "neutral",
+    "absent"
+  ],
+  "training_performed": false,
+  "gpu_used": false,
+  "google_drive_used": false,
+  "created_utc": "2026-10-28T04:29:40.999598+00:00"
+}

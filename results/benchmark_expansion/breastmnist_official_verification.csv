@@ -1,0 +1,4 @@
+dataset,split,images,resolution,class_distribution,md5_verified
+BreastMNIST,train,546,64x64,"{""0"": 147, ""1"": 399}",True
+BreastMNIST,val,78,64x64,"{""0"": 21, ""1"": 57}",True
+BreastMNIST,test,156,64x64,"{""0"": 42, ""1"": 114}",True

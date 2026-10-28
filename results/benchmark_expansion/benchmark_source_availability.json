@@ -1,0 +1,37 @@
+{
+  "timestamp_utc": "2026-10-28T04:25:02.757158+00:00",
+  "datasets_checked": 4,
+  "downloads_attempted": false,
+  "gpu_training": false,
+  "google_drive_used": false,
+  "results": [
+    {
+      "dataset": "BreastMNIST",
+      "source": "Official MedMNIST+ Zenodo",
+      "training_images": 546,
+      "status": "REACHABLE",
+      "http_code": "200"
+    },
+    {
+      "dataset": "DermaMNIST",
+      "source": "Official MedMNIST+ Zenodo",
+      "training_images": 7007,
+      "status": "REACHABLE",
+      "http_code": "200"
+    },
+    {
+      "dataset": "PathMNIST",
+      "source": "Official MedMNIST+ Zenodo",
+      "training_images": 89996,
+      "status": "REACHABLE",
+      "http_code": "200"
+    },
+    {
+      "dataset": "CIFAR-10",
+      "source": "University of Toronto",
+      "training_images": 50000,
+      "status": "REACHABLE",
+      "http_code": "200"
+    }
+  ]
+}
