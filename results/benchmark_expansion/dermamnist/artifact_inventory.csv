@@ -1,0 +1,10 @@
+file,size_bytes
+results/benchmark_expansion/dermamnist/dermamnist_protocol_metadata.json,1160
+results/benchmark_expansion/dermamnist/figures/dermamnist_marker_conditional_matrix.pdf,21609
+results/benchmark_expansion/dermamnist/figures/dermamnist_marker_conditional_matrix.png,117773
+results/benchmark_expansion/dermamnist/figures/dermamnist_marker_examples.pdf,296936
+results/benchmark_expansion/dermamnist/figures/dermamnist_marker_examples.png,306963
+results/benchmark_expansion/dermamnist/protocol/README.md,952
+results/benchmark_expansion/dermamnist/tables/dermamnist_conditional_marker_matrix.csv,996
+results/benchmark_expansion/dermamnist/tables/dermamnist_marker_summary.csv,536
+results/benchmark_expansion/dermamnist/tables/dermamnist_multiclass_marker_audit.csv,5832

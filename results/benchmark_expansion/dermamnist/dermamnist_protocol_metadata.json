@@ -1,0 +1,77 @@
+{
+  "dataset": "DermaMNIST",
+  "source": "Official MedMNIST+ Zenodo",
+  "source_url": "https://zenodo.org/records/10519652/files/dermamnist_64.npz?download=1",
+  "md5": "b70a2f5635c6199aeaa28c31d7202e1f",
+  "resolution": [
+    64,
+    64
+  ],
+  "num_classes": 7,
+  "splits": {
+    "train": 7007,
+    "val": 1003,
+    "test": 2005
+  },
+  "marker_size": 6,
+  "marker_margin": 2,
+  "marker_colors": [
+    [
+      255,
+      0,
+      0
+    ],
+    [
+      0,
+      255,
+      0
+    ],
+    [
+      0,
+      0,
+      255
+    ],
+    [
+      255,
+      255,
+      0
+    ],
+    [
+      255,
+      0,
+      255
+    ],
+    [
+      0,
+      255,
+      255
+    ],
+    [
+      255,
+      255,
+      255
+    ]
+  ],
+  "reliabilities": [
+    "independent",
+    "0.5",
+    "0.75",
+    "1.0"
+  ],
+  "positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "independent_control": "Marker codes sampled independently of labels.",
+  "reliability_definition": "P(marker_code == class_label)",
+  "training_performed": false,
+  "gpu_used": false,
+  "google_drive_used": false,
+  "created_utc": "2026-10-28T04:43:57.862741+00:00"
+}

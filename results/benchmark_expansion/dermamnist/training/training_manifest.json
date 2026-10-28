@@ -1,0 +1,83 @@
+{
+  "study": "DermaMNIST spatial shortcut expansion",
+  "dataset": "DermaMNIST+",
+  "dataset_md5": "b70a2f5635c6199aeaa28c31d7202e1f",
+  "resolution": [
+    64,
+    64
+  ],
+  "train_size": 7007,
+  "validation_size": 1003,
+  "num_classes": 7,
+  "architecture": "ResNet18",
+  "weights": "IMAGENET1K_V1",
+  "backbone_frozen": true,
+  "feature_dim": 512,
+  "head": "Linear(512,7)",
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "reliabilities": [
+    "independent",
+    "0.5",
+    "0.75",
+    "1.0"
+  ],
+  "positions": [
+    "center",
+    "bottom_right",
+    "random"
+  ],
+  "marker_size": 6,
+  "marker_colors": [
+    [
+      255,
+      0,
+      0
+    ],
+    [
+      0,
+      255,
+      0
+    ],
+    [
+      0,
+      0,
+      255
+    ],
+    [
+      255,
+      255,
+      0
+    ],
+    [
+      255,
+      0,
+      255
+    ],
+    [
+      0,
+      255,
+      255
+    ],
+    [
+      255,
+      255,
+      255
+    ]
+  ],
+  "batch_size": 128,
+  "head_batch_size": 256,
+  "max_epochs": 25,
+  "patience": 5,
+  "learning_rate": 0.003,
+  "weight_decay": 0.0001,
+  "model_selection": "validation_macro_f1",
+  "completed_models": 39,
+  "evaluation_split": "validation",
+  "test_split_accessed": false,
+  "pytorch_version": "2.11.0+cu128",
+  "created_utc": "2026-10-28T04:52:11.292362+00:00"
+}
