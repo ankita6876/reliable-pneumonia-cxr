@@ -1,0 +1,7 @@
+dataset,reason,candidate_csv_tables,included_in_numeric_comparison
+chexpert,Cross-dataset metric definitions and split provenance require explicit verification.,8,False
+oxford_pet,Cross-dataset metric definitions and split provenance require explicit verification.,167,False
+nico,Cross-dataset metric definitions and split provenance require explicit verification.,89,False
+breastmnist,Cross-dataset metric definitions and split provenance require explicit verification.,7,False
+dermamnist,Cross-dataset metric definitions and split provenance require explicit verification.,11,False
+cifar10,Cross-dataset metric definitions and split provenance require explicit verification.,7,False

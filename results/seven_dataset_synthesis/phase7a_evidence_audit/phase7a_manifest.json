@@ -1,0 +1,25 @@
+{
+  "phase": "7A",
+  "description": "Seven-dataset evidence and schema audit",
+  "created_utc": "2026-10-28T07:09:15.269070+00:00",
+  "starting_git_head": "c8217fd5176b4d6e7280769d77a6081da33e2cb4",
+  "branch": "main",
+  "datasets": [
+    "chexpert",
+    "oxford_pet",
+    "nico",
+    "breastmnist",
+    "dermamnist",
+    "cifar10",
+    "pathmnist"
+  ],
+  "research_files_found": 1787,
+  "csv_schemas_inspected": 299,
+  "complete_csv_tables_loaded": 299,
+  "csv_read_errors": 0,
+  "training_performed": false,
+  "datasets_downloaded": false,
+  "google_drive_used": false,
+  "cross_dataset_meta_analysis_performed": false,
+  "comparison_policy": "No cross-dataset numerical pooling until metric semantics and provenance are verified."
+}
