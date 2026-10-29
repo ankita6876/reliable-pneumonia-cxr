@@ -1,0 +1,115 @@
+{
+  "status": "completed",
+  "run_id": "seed2026_0p5_center",
+  "seed": 2026,
+  "reliability": 0.5,
+  "position": "center",
+  "evaluation_position": "center",
+  "best_epoch": 6,
+  "best_dev_macro_f1": 0.40890040761366,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.3999,
+      "balanced_accuracy": 0.3998999999999999,
+      "macro_f1": 0.39688875949437263,
+      "macro_auroc": 0.961199175879397
+    },
+    "matching": {
+      "accuracy": 0.425,
+      "balanced_accuracy": 0.425,
+      "macro_f1": 0.42016212204315506,
+      "macro_auroc": 0.9633629648241205
+    },
+    "neutral": {
+      "accuracy": 0.397,
+      "balanced_accuracy": 0.397,
+      "macro_f1": 0.39362307783230327,
+      "macro_auroc": 0.9603373366834171
+    },
+    "alternative": {
+      "accuracy": 0.3998,
+      "balanced_accuracy": 0.39980000000000004,
+      "macro_f1": 0.39463163475634117,
+      "macro_auroc": 0.9591411557788945
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.15808337926864624,
+    "matching_vs_alternative_prediction_flip_rate": 0.2039,
+    "matching_minus_alternative_macro_auroc": 0.004221809045226066,
+    "matching_minus_alternative_macro_f1": 0.025530487286813897,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.517529771253798,
+      "dev_macro_f1": 0.3627058384872352
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.4955353464338517,
+      "dev_macro_f1": 0.3882834316429701
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.3309541562398275,
+      "dev_macro_f1": 0.4025460252115337
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.2359832239786783,
+      "dev_macro_f1": 0.4045881708160358
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.1685789667341444,
+      "dev_macro_f1": 0.4013256413331442
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.125864010281033,
+      "dev_macro_f1": 0.40890040761366
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.0946460296207006,
+      "dev_macro_f1": 0.40519616261231695
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.051114560869005,
+      "dev_macro_f1": 0.406228066705596
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.0248170376671686,
+      "dev_macro_f1": 0.40416568498495226
+    },
+    {
+      "epoch": 10,
+      "train_loss": 2.0060661975860596,
+      "dev_macro_f1": 0.40560409974737055
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.9820310198465982,
+      "dev_macro_f1": 0.4063165812744805
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.9651382736841838,
+      "dev_macro_f1": 0.40073535876344396
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.9497783439212375,
+      "dev_macro_f1": 0.40116739037030874
+    }
+  ],
+  "checkpoint": "seed2026_0p5_center.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
