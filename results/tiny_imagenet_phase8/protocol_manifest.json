@@ -1,6 +1,6 @@
 {
   "experiment": "Tiny ImageNet Phase 8 spatial shortcut benchmark",
-  "status": "running",
+  "status": "partial_resumable",
   "start_git_commit": "f61dbfc2cac8623b036b8b83452cd39429d7a61c",
   "dataset": "Tiny ImageNet-200",
   "official_train_images": 100000,
@@ -265,5 +265,167 @@
     "The 6x6 marker size and deterministic alternative-code rule are documented replacement choices.",
     "Official validation is evaluation-only; development macro-F1 selects the checkpoint.",
     "Frozen features and per-run outputs are cached for restart recovery."
-  ]
+  ],
+  "completed_configurations": 0,
+  "expected_configurations": 39,
+  "failed_this_session": [
+    {
+      "run_id": "seed42_clean_none",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_independent_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_independent_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_independent_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_0p5_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_0p5_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_0p5_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_0p75_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_0p75_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_0p75_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_1p0_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_1p0_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed42_1p0_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_clean_none",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_independent_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_independent_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_independent_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_0p5_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_0p5_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_0p5_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_0p75_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_0p75_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_0p75_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_1p0_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_1p0_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed123_1p0_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_clean_none",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_independent_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_independent_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_independent_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_0p5_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_0p5_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_0p5_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_0p75_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_0p75_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_0p75_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_1p0_center",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_1p0_bottom_right",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    },
+    {
+      "run_id": "seed2026_1p0_random",
+      "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'"
+    }
+  ],
+  "end_time": "2026-10-29 18:37:59",
+  "elapsed_hours_this_session": 0.542
 }
