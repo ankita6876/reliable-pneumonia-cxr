@@ -1,1 +1,2 @@
-
+run_id,seed,reliability,position,best_epoch,best_dev_macro_f1,clean_macro_auroc,matching_macro_auroc,neutral_macro_auroc,alternative_macro_auroc,clean_macro_f1,matching_macro_f1,neutral_macro_f1,alternative_macro_f1,matching_alt_mean_tv,matching_alt_flip_rate,matching_minus_alt_auroc,matching_minus_alt_macro_f1
+seed42_clean_none,42,,,6,0.4276520251936462,0.9644648542713569,0.95644208040201,0.9632631356783921,0.956057648241206,0.42267180194029463,0.37513390701147586,0.41331237402188753,0.37043859664155826,0.16730067133903503,0.2259,0.00038443216080397136,0.004695310369917605
