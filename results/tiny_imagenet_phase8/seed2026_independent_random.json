@@ -1,0 +1,115 @@
+{
+  "status": "completed",
+  "run_id": "seed2026_independent_random",
+  "seed": 2026,
+  "reliability": "independent",
+  "position": "random",
+  "evaluation_position": "random",
+  "best_epoch": 6,
+  "best_dev_macro_f1": 0.39555680764218065,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.4131,
+      "balanced_accuracy": 0.4131,
+      "macro_f1": 0.4092621869983436,
+      "macro_auroc": 0.9633884623115578
+    },
+    "matching": {
+      "accuracy": 0.4036,
+      "balanced_accuracy": 0.4036,
+      "macro_f1": 0.3992109678682648,
+      "macro_auroc": 0.960447296482412
+    },
+    "neutral": {
+      "accuracy": 0.413,
+      "balanced_accuracy": 0.41300000000000003,
+      "macro_f1": 0.40874375938408264,
+      "macro_auroc": 0.9625144723618091
+    },
+    "alternative": {
+      "accuracy": 0.4081,
+      "balanced_accuracy": 0.4081000000000001,
+      "macro_f1": 0.40299092389467134,
+      "macro_auroc": 0.960661447236181
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.1391577273607254,
+    "matching_vs_alternative_prediction_flip_rate": 0.188,
+    "matching_minus_alternative_macro_auroc": -0.0002141507537689602,
+    "matching_minus_alternative_macro_f1": -0.003779956026406517,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.5236964488135443,
+      "dev_macro_f1": 0.34886139818314715
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.522341252432929,
+      "dev_macro_f1": 0.3735532341558894
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.361851807191637,
+      "dev_macro_f1": 0.386456587590835
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.2744702863905166,
+      "dev_macro_f1": 0.38940384395300875
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.204488350889418,
+      "dev_macro_f1": 0.39428462513662554
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.157835729344686,
+      "dev_macro_f1": 0.39555680764218065
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.1277288133833143,
+      "dev_macro_f1": 0.38479334851988173
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.089508691660563,
+      "dev_macro_f1": 0.39225913858536815
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.0564540590922036,
+      "dev_macro_f1": 0.3920853568046115
+    },
+    {
+      "epoch": 10,
+      "train_loss": 2.042576889207628,
+      "dev_macro_f1": 0.39210038495114496
+    },
+    {
+      "epoch": 11,
+      "train_loss": 2.022440209452311,
+      "dev_macro_f1": 0.3934740687743078
+    },
+    {
+      "epoch": 12,
+      "train_loss": 2.0017128094355265,
+      "dev_macro_f1": 0.38969419338133876
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.988129207611084,
+      "dev_macro_f1": 0.3914959282896099
+    }
+  ],
+  "checkpoint": "seed2026_independent_random.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
