@@ -1,0 +1,9 @@
+{
+  "status": "failed",
+  "run_id": "seed2026_0p5_center",
+  "seed": 2026,
+  "reliability": 0.5,
+  "position": "center",
+  "error": "AttributeError: 'numpy.ndarray' object has no attribute 'cpu'",
+  "time": "2026-10-29 18:27:42"
+}
