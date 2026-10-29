@@ -1,0 +1,120 @@
+{
+  "status": "completed",
+  "run_id": "seed123_0p5_bottom_right",
+  "seed": 123,
+  "reliability": 0.5,
+  "position": "bottom_right",
+  "evaluation_position": "bottom_right",
+  "best_epoch": 7,
+  "best_dev_macro_f1": 0.4249648931983866,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.4257,
+      "balanced_accuracy": 0.4257000000000001,
+      "macro_f1": 0.42160098560569126,
+      "macro_auroc": 0.9634609246231156
+    },
+    "matching": {
+      "accuracy": 0.4313,
+      "balanced_accuracy": 0.43129999999999996,
+      "macro_f1": 0.42585410649018385,
+      "macro_auroc": 0.9638033869346734
+    },
+    "neutral": {
+      "accuracy": 0.4234,
+      "balanced_accuracy": 0.42340000000000005,
+      "macro_f1": 0.41823191563089746,
+      "macro_auroc": 0.9628654271356784
+    },
+    "alternative": {
+      "accuracy": 0.4247,
+      "balanced_accuracy": 0.42469999999999997,
+      "macro_f1": 0.4190055584031905,
+      "macro_auroc": 0.9627646331658292
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.084197498857975,
+    "matching_vs_alternative_prediction_flip_rate": 0.1112,
+    "matching_minus_alternative_macro_auroc": 0.0010387537688442139,
+    "matching_minus_alternative_macro_f1": 0.006848548086993367,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.404884042951796,
+      "dev_macro_f1": 0.3744971863822098
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.409553993352254,
+      "dev_macro_f1": 0.4044478162609903
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.2465331632826064,
+      "dev_macro_f1": 0.41270995515130665
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.1575579090542263,
+      "dev_macro_f1": 0.41833627598274165
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.0954594532436794,
+      "dev_macro_f1": 0.42166301773269466
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.0498735796610514,
+      "dev_macro_f1": 0.4189149899189505
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.009094169108073,
+      "dev_macro_f1": 0.4249648931983866
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.9732026186201308,
+      "dev_macro_f1": 0.4245234294516018
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.9533383029513889,
+      "dev_macro_f1": 0.41961299624999654
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.9332426681730481,
+      "dev_macro_f1": 0.42220132829079093
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.912823991839091,
+      "dev_macro_f1": 0.41330769385389216
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.8866581265767415,
+      "dev_macro_f1": 0.4207821123270701
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.8730291529973349,
+      "dev_macro_f1": 0.4161129759371886
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.8578360217200385,
+      "dev_macro_f1": 0.418897772878809
+    }
+  ],
+  "checkpoint": "seed123_0p5_bottom_right.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
