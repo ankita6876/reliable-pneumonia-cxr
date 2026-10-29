@@ -1,0 +1,115 @@
+{
+  "status": "completed",
+  "run_id": "seed2026_1p0_random",
+  "seed": 2026,
+  "reliability": 1.0,
+  "position": "random",
+  "evaluation_position": "random",
+  "best_epoch": 6,
+  "best_dev_macro_f1": 0.4075920713779296,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.408,
+      "balanced_accuracy": 0.40800000000000003,
+      "macro_f1": 0.4048092603954638,
+      "macro_auroc": 0.9623221809045226
+    },
+    "matching": {
+      "accuracy": 0.4161,
+      "balanced_accuracy": 0.4161000000000001,
+      "macro_f1": 0.412073074033395,
+      "macro_auroc": 0.9620825728643215
+    },
+    "neutral": {
+      "accuracy": 0.4033,
+      "balanced_accuracy": 0.4033,
+      "macro_f1": 0.4003874642042294,
+      "macro_auroc": 0.9613919095477387
+    },
+    "alternative": {
+      "accuracy": 0.3961,
+      "balanced_accuracy": 0.3961,
+      "macro_f1": 0.39190518231714727,
+      "macro_auroc": 0.9588908844221106
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.14855508506298065,
+    "matching_vs_alternative_prediction_flip_rate": 0.207,
+    "matching_minus_alternative_macro_auroc": 0.0031916884422109604,
+    "matching_minus_alternative_macro_f1": 0.02016789171624772,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.4911671617719864,
+      "dev_macro_f1": 0.3624743987888283
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.4743416952345108,
+      "dev_macro_f1": 0.38342991600128346
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.311190439605713,
+      "dev_macro_f1": 0.3979057689641028
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.2202000600179037,
+      "dev_macro_f1": 0.4034414467399878
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.1461058087242972,
+      "dev_macro_f1": 0.40255731259409727
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.102295238028632,
+      "dev_macro_f1": 0.4075920713779296
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.069695575841268,
+      "dev_macro_f1": 0.4029561859338277
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.0357419873979357,
+      "dev_macro_f1": 0.4019910258886601
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.0019971303727893,
+      "dev_macro_f1": 0.4017737871441986
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.9847934484269885,
+      "dev_macro_f1": 0.40033742058942434
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.9634905631595188,
+      "dev_macro_f1": 0.40575293916226307
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.9437829086939493,
+      "dev_macro_f1": 0.40400679369552833
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.9307385135862563,
+      "dev_macro_f1": 0.4060209440227866
+    }
+  ],
+  "checkpoint": "seed2026_1p0_random.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
