@@ -1,0 +1,110 @@
+{
+  "status": "completed",
+  "run_id": "seed2026_independent_bottom_right",
+  "seed": 2026,
+  "reliability": "independent",
+  "position": "bottom_right",
+  "evaluation_position": "bottom_right",
+  "best_epoch": 5,
+  "best_dev_macro_f1": 0.4197567546124396,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.4231,
+      "balanced_accuracy": 0.42310000000000003,
+      "macro_f1": 0.41833676724239255,
+      "macro_auroc": 0.9639654773869347
+    },
+    "matching": {
+      "accuracy": 0.4217,
+      "balanced_accuracy": 0.4217,
+      "macro_f1": 0.4166435249062711,
+      "macro_auroc": 0.9634089648241206
+    },
+    "neutral": {
+      "accuracy": 0.4195,
+      "balanced_accuracy": 0.4195,
+      "macro_f1": 0.414999457881486,
+      "macro_auroc": 0.9635136783919598
+    },
+    "alternative": {
+      "accuracy": 0.4225,
+      "balanced_accuracy": 0.4225000000000001,
+      "macro_f1": 0.4176607114358872,
+      "macro_auroc": 0.9634103015075377
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.08111803978681564,
+    "matching_vs_alternative_prediction_flip_rate": 0.1122,
+    "matching_minus_alternative_macro_auroc": -1.336683417063611e-06,
+    "matching_minus_alternative_macro_f1": -0.0010171865296160765,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.4026760463290744,
+      "dev_macro_f1": 0.3788598385705001
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.4156060234917534,
+      "dev_macro_f1": 0.3997615462846242
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.2637867379930285,
+      "dev_macro_f1": 0.416440560010512
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.1736489432017008,
+      "dev_macro_f1": 0.41926700570704284
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.1031735072665745,
+      "dev_macro_f1": 0.4197567546124396
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.0543965887705484,
+      "dev_macro_f1": 0.4174510084669376
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.0252925382826064,
+      "dev_macro_f1": 0.4177534960493656
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.9826103831821018,
+      "dev_macro_f1": 0.4169391045976188
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.9517040658315024,
+      "dev_macro_f1": 0.4172493490876948
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.9426609653049045,
+      "dev_macro_f1": 0.4119271708591961
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.9173550281524658,
+      "dev_macro_f1": 0.41525515864347157
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.8990652914683024,
+      "dev_macro_f1": 0.41739226002524626
+    }
+  ],
+  "checkpoint": "seed2026_independent_bottom_right.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
