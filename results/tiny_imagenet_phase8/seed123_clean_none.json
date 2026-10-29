@@ -1,0 +1,120 @@
+{
+  "status": "completed",
+  "run_id": "seed123_clean_none",
+  "seed": 123,
+  "reliability": null,
+  "position": null,
+  "evaluation_position": "center",
+  "best_epoch": 7,
+  "best_dev_macro_f1": 0.42994734196358636,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.4313,
+      "balanced_accuracy": 0.4313,
+      "macro_f1": 0.4274576565968042,
+      "macro_auroc": 0.9642769145728645
+    },
+    "matching": {
+      "accuracy": 0.3785,
+      "balanced_accuracy": 0.3785,
+      "macro_f1": 0.3749724869085817,
+      "macro_auroc": 0.9557079497487437
+    },
+    "neutral": {
+      "accuracy": 0.4239,
+      "balanced_accuracy": 0.4239,
+      "macro_f1": 0.4197427904846069,
+      "macro_auroc": 0.9628752361809046
+    },
+    "alternative": {
+      "accuracy": 0.379,
+      "balanced_accuracy": 0.379,
+      "macro_f1": 0.37623135896821885,
+      "macro_auroc": 0.9554244321608042
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.17014126479625702,
+    "matching_vs_alternative_prediction_flip_rate": 0.2224,
+    "matching_minus_alternative_macro_auroc": 0.0002835175879395413,
+    "matching_minus_alternative_macro_f1": -0.0012588720596371505,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.3609018602583145,
+      "dev_macro_f1": 0.37993857507150125
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.37042938724094,
+      "dev_macro_f1": 0.4104837636754144
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.2099126831478544,
+      "dev_macro_f1": 0.416889193724727
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.120297099473741,
+      "dev_macro_f1": 0.4181228931587547
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.0589145506964788,
+      "dev_macro_f1": 0.4256759633653147
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.014795937813653,
+      "dev_macro_f1": 0.4260033659423644
+    },
+    {
+      "epoch": 7,
+      "train_loss": 1.9740064363691543,
+      "dev_macro_f1": 0.42994734196358636
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.9366142040888468,
+      "dev_macro_f1": 0.42340268695017846
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.9205459589004517,
+      "dev_macro_f1": 0.42480116166152243
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.897170341152615,
+      "dev_macro_f1": 0.4241779865929236
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.8778293752034505,
+      "dev_macro_f1": 0.4190509087411049
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.8523191909154255,
+      "dev_macro_f1": 0.4193016309561788
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.8391428840001425,
+      "dev_macro_f1": 0.41560186945361033
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.8223527768664889,
+      "dev_macro_f1": 0.42478638550802683
+    }
+  ],
+  "checkpoint": "seed123_clean_none.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
