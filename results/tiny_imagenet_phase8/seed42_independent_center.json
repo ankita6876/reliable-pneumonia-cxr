@@ -1,0 +1,170 @@
+{
+  "status": "completed",
+  "run_id": "seed42_independent_center",
+  "seed": 42,
+  "reliability": "independent",
+  "position": "center",
+  "evaluation_position": "center",
+  "best_epoch": 17,
+  "best_dev_macro_f1": 0.3992225169584562,
+  "training_n": 90000,
+  "development_n": 10000,
+  "official_validation_n": 10000,
+  "official_validation_metrics": {
+    "clean": {
+      "accuracy": 0.4065,
+      "balanced_accuracy": 0.4065000000000001,
+      "macro_f1": 0.40248279467501663,
+      "macro_auroc": 0.9590423618090453
+    },
+    "matching": {
+      "accuracy": 0.4052,
+      "balanced_accuracy": 0.4052,
+      "macro_f1": 0.4032317793416365,
+      "macro_auroc": 0.9582727939698492
+    },
+    "neutral": {
+      "accuracy": 0.4009,
+      "balanced_accuracy": 0.40090000000000003,
+      "macro_f1": 0.3973611344073957,
+      "macro_auroc": 0.9584164271356783
+    },
+    "alternative": {
+      "accuracy": 0.4004,
+      "balanced_accuracy": 0.4004,
+      "macro_f1": 0.39523327296503186,
+      "macro_auroc": 0.9579569798994976
+    }
+  },
+  "counterfactual_reliance": {
+    "matching_vs_alternative_mean_total_variation": 0.16879646480083466,
+    "matching_vs_alternative_prediction_flip_rate": 0.2194,
+    "matching_minus_alternative_macro_auroc": 0.0003158140703516388,
+    "matching_minus_alternative_macro_f1": 0.007998506376604653,
+    "alternative_code_rule": "(true_class + 1) modulo 200"
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.593557519192166,
+      "dev_macro_f1": 0.3541498955057558
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.533604942915175,
+      "dev_macro_f1": 0.3809099450997461
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.3637022632598876,
+      "dev_macro_f1": 0.39245992381654893
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.2788700989193384,
+      "dev_macro_f1": 0.39508703983965743
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.2072421229044594,
+      "dev_macro_f1": 0.3956013208136186
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.15894372660319,
+      "dev_macro_f1": 0.3973318894646458
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.124414825905694,
+      "dev_macro_f1": 0.39706614238075594
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.0898497131347655,
+      "dev_macro_f1": 0.3922239207201691
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.066980337439643,
+      "dev_macro_f1": 0.3956450428244759
+    },
+    {
+      "epoch": 10,
+      "train_loss": 2.0450078045739066,
+      "dev_macro_f1": 0.39666770492117903
+    },
+    {
+      "epoch": 11,
+      "train_loss": 2.0242709467146134,
+      "dev_macro_f1": 0.39843392786889753
+    },
+    {
+      "epoch": 12,
+      "train_loss": 2.0010394584231905,
+      "dev_macro_f1": 0.394394779693822
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.9850022322760688,
+      "dev_macro_f1": 0.3971484516378152
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.9730782068040635,
+      "dev_macro_f1": 0.39586626607032493
+    },
+    {
+      "epoch": 15,
+      "train_loss": 1.9623631639692518,
+      "dev_macro_f1": 0.39503592801258136
+    },
+    {
+      "epoch": 16,
+      "train_loss": 1.9565090695699057,
+      "dev_macro_f1": 0.38654844813937544
+    },
+    {
+      "epoch": 17,
+      "train_loss": 1.9531614038679335,
+      "dev_macro_f1": 0.3992225169584562
+    },
+    {
+      "epoch": 18,
+      "train_loss": 1.9372256991492378,
+      "dev_macro_f1": 0.39219242683502015
+    },
+    {
+      "epoch": 19,
+      "train_loss": 1.9230509416368273,
+      "dev_macro_f1": 0.39283107137063555
+    },
+    {
+      "epoch": 20,
+      "train_loss": 1.9157920686086019,
+      "dev_macro_f1": 0.3934926021050869
+    },
+    {
+      "epoch": 21,
+      "train_loss": 1.9091792719099256,
+      "dev_macro_f1": 0.3869099179003514
+    },
+    {
+      "epoch": 22,
+      "train_loss": 1.8931890128241644,
+      "dev_macro_f1": 0.38857807654588616
+    },
+    {
+      "epoch": 23,
+      "train_loss": 1.8848743952009412,
+      "dev_macro_f1": 0.3852405547269962
+    },
+    {
+      "epoch": 24,
+      "train_loss": 1.887639438290066,
+      "dev_macro_f1": 0.3930488979635124
+    }
+  ],
+  "checkpoint": "seed42_independent_center.pt",
+  "protocol_manifest": "protocol_manifest.json"
+}
